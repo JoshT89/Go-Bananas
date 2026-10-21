@@ -1,6 +1,6 @@
-# Banana Battalion
+# Go-Bananas
 
-A playable browser arcade survival game built with Phaser 3, TypeScript, and Vite.
+**Banana Battalion** is a playable browser arcade survival game built with Phaser 3, TypeScript, and Vite.
 
 ## Run locally
 
