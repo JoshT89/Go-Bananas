@@ -1,0 +1,8 @@
+node_modules/
+.npm-cache/
+dist/
+.sites-runtime/
+.openai/*.tar.gz
+*.log
+.env*
+!.env.example
