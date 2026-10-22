@@ -57,7 +57,6 @@ export class Simulation {
   toSpawn = 0;
   waveTotal = 0;
   spawnClock = 0;
-  continues = 2;
   bossSpawned = false;
   private serial = 0;
   private seed: number;
@@ -88,7 +87,6 @@ export class Simulation {
     this.spawnClock = 0.65;
     if (localWave === 6) { this.spawnEnemy('boss'); this.bossSpawned = true; this.waveTotal++; }
     for (const p of this.players) {
-      if (!p.alive && p.downTime <= 0 && this.continues > 0) { this.continues--; p.alive = true; p.hp = REVIVE_HEALTH; p.invulnerable = 3; }
       p.bombs = Math.min(5, p.bombs + (this.wave > 1 ? 1 : 0));
     }
     this.events.push({ kind: 'wave', x: WIDTH / 2, y: HEIGHT / 2, text: localWave === 6 ? (this.world === 0 ? 'KING CLAW APPROACHES' : this.world === 1 ? 'PROFESSOR PURR APPROACHES' : 'ADMIRAL CLAW APPROACHES') : `WAVE ${String(this.wave).padStart(2, '0')}` });
@@ -166,14 +164,10 @@ export class Simulation {
   damagePlayer(p: Player) {
     if (!p.alive || p.invulnerable > 0 || p.dashTime > 0 || p.vehicleTime > 0) return;
     if (p.shield > 0) { p.shield--; p.invulnerable = 1; return; }
-    p.hp--; p.invulnerable = 1.45;
+    p.hp--; p.invulnerable = 0.6;
     this.events.push({ kind: 'hurt', x: p.x, y: p.y, owner: p.id });
     if (p.hp > 0) return;
-    if (this.players.length === 1 && this.continues > 0) {
-      this.continues--; p.hp = MAX_HEALTH; p.invulnerable = 3;
-      this.explode(p.x, p.y, 200, 150, p.id);
-      this.events.push({ kind: 'revive', x: p.x, y: p.y, text: 'SECOND CHANCE!' });
-    } else { p.alive = false; p.downTime = 14; this.events.push({ kind: 'down', x: p.x, y: p.y, owner: p.id }); }
+    p.alive = false; p.downTime = 14; this.events.push({ kind: 'down', x: p.x, y: p.y, owner: p.id });
   }
   collect(p: Player, item: Pickup) {
     if (item.kind === 'nuts' || item.kind === 'coconut') { p.weapon = item.kind; p.weaponTime = 18; }
@@ -292,8 +286,7 @@ export class Simulation {
       else {
         this.mode = 'break'; this.breakTime = this.wave % 6 === 0 ? 7 : 4;
         this.score += 150 * this.wave;
-        for (const p of this.players) if (p.alive) p.hp = Math.min(MAX_HEALTH, p.hp + 1);
-        this.events.push({ kind: 'wave', x: WIDTH / 2, y: HEIGHT / 2, text: this.wave % 6 === 0 ? 'PORTAL OPEN! NEXT STOP…' : 'WAVE CLEARED! +½ HEART' });
+        this.events.push({ kind: 'wave', x: WIDTH / 2, y: HEIGHT / 2, text: this.wave % 6 === 0 ? 'PORTAL OPEN! NEXT STOP…' : 'WAVE CLEARED!' });
       }
     }
   }

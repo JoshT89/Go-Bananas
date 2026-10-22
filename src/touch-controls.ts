@@ -31,26 +31,32 @@ export class TouchControls {
       stick.addEventListener('keydown', event => {
         if (!this.playing) return;
         if (kind === 'move') { const moves: Record<string, [number, number]> = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] }; const vector = moves[event.key]; if (vector) { event.preventDefault(); this.state.move = { x: vector[0], y: vector[1] }; } }
-        else if (event.code === 'Space' || event.code === 'Enter') { event.preventDefault(); this.state.aimHeld = true; }
+        else { const aims: Record<string, [number, number]> = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] }; const vector = aims[event.key]; if (vector) { event.preventDefault(); this.state.aim = { x: vector[0], y: vector[1] }; this.state.aimHeld = true; } }
       });
-      stick.addEventListener('keyup', () => { if (kind === 'move') this.state.move = { x: 0, y: 0 }; else this.state.aimHeld = false; });
-      stick.addEventListener('blur', () => { if (kind === 'move' && this.state.movePointer === null) this.state.move = { x: 0, y: 0 }; if (kind === 'aim' && this.state.aimPointer === null) this.state.aimHeld = false; });
+      stick.addEventListener('keyup', () => { if (kind === 'move') this.state.move = { x: 0, y: 0 }; else { this.state.aim = { x: 0, y: 0 }; this.state.aimHeld = false; } });
+      stick.addEventListener('blur', () => { if (kind === 'move' && this.state.movePointer === null) this.state.move = { x: 0, y: 0 }; if (kind === 'aim' && this.state.aimPointer === null) { this.state.aim = { x: 0, y: 0 }; this.state.aimHeld = false; } });
     }
-    for (const action of ['bomb', 'dash'] as const) root.querySelector(`[data-action="${action}"]`)!.addEventListener('click', event => { event.preventDefault(); if (this.playing) this.state.queue(action); });
+    for (const action of ['bomb', 'dash'] as const) {
+      const button = root.querySelector<HTMLButtonElement>(`[data-action="${action}"]`)!;
+      // Pointer input works for a second thumb too; the later click must not spend twice.
+      button.addEventListener('pointerdown', event => { event.preventDefault(); event.stopPropagation(); if (this.playing) this.state.queue(action); });
+      button.addEventListener('click', event => { event.preventDefault(); if (this.playing && event.detail === 0) this.state.queue(action); });
+    }
     const revive = root.querySelector<HTMLButtonElement>('[data-action="revive"]')!;
     revive.addEventListener('pointerdown', event => { event.preventDefault(); if (this.playing) { revive.setPointerCapture(event.pointerId); this.state.revive = true; } });
     for (const type of ['pointerup', 'pointercancel', 'lostpointercapture', 'blur']) revive.addEventListener(type, () => { this.state.revive = false; });
     revive.addEventListener('keydown', event => { if (this.playing && (event.code === 'Space' || event.code === 'Enter')) this.state.revive = true; });
     revive.addEventListener('keyup', () => { this.state.revive = false; });
-    window.addEventListener('blur', () => this.reset());
-    document.addEventListener('visibilitychange', () => { if (document.hidden) this.reset(); });
+    window.addEventListener('blur', () => { this.state.setActive(false); this.reset(); });
+    window.addEventListener('focus', () => this.state.setActive(this.playing && this.enabled));
+    document.addEventListener('visibilitychange', () => { this.state.setActive(!document.hidden && this.playing && this.enabled); if (document.hidden) this.reset(); });
     window.addEventListener('orientationchange', () => this.reset());
   }
-  setEnabled(value: boolean) { this.enabled = value; this.root.classList.toggle('hidden', !value); document.getElementById('game-frame')!.classList.toggle('touch-enabled', value); if (!value) this.reset(); }
+  setEnabled(value: boolean) { this.enabled = value; this.root.classList.toggle('hidden', !value); document.getElementById('game-frame')!.classList.toggle('touch-enabled', value); this.state.setActive(value && this.playing); if (!value) this.reset(); }
   setPlaying(value: boolean) {
     if (this.playing === value) return;
     this.playing = value; this.root.classList.toggle('inactive', !value);
-    this.buttons.forEach(button => { button.disabled = !value; }); this.reset();
+    this.buttons.forEach(button => { button.disabled = !value; }); this.reset(); this.state.setActive(value && this.enabled);
   }
   reset() { this.state.reset(); this.root.querySelectorAll<HTMLElement>('.stick-nub').forEach(nub => { nub.style.transform = ''; }); this.root.querySelectorAll('.held').forEach(stick => stick.classList.remove('held')); }
 }

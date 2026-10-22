@@ -100,9 +100,10 @@ export class JungleScene extends Phaser.Scene {
           if (!mobile.fire && !input.fire) { input.ax = Math.cos(p.angle); input.ay = Math.sin(p.angle); }
           if (mobile.mx || mobile.my || this.touch!.state.movePointer !== null) { input.mx = mobile.mx; input.my = mobile.my; }
           if (mobile.fire) {
+            const manualFire = input.fire;
             input.fire = true;
             if (Math.hypot(mobile.ax, mobile.ay) > 0.15) { input.ax = mobile.ax; input.ay = mobile.ay; }
-            else {
+            else if (!manualFire) {
               const nearest = this.sim.enemies.reduce<Enemy | undefined>((nearest, e) => !nearest || Math.hypot(e.x - p.x, e.y - p.y) < Math.hypot(nearest.x - p.x, nearest.y - p.y) ? e : nearest, undefined);
               input.ax = nearest ? nearest.x - p.x : Math.cos(p.angle); input.ay = nearest ? nearest.y - p.y : Math.sin(p.angle);
             }
@@ -110,7 +111,8 @@ export class JungleScene extends Phaser.Scene {
           input.bomb ||= mobile.bomb; input.dash ||= mobile.dash; input.revive ||= mobile.revive;
         }
       }
-      if (this.assist && this.sim.enemies.length && (input.fire || !pad)) {
+      const manualTouchAim = p.id === 0 && this.touch?.enabled && Math.hypot(this.touch.state.aim.x, this.touch.state.aim.y) > 0.15;
+      if (this.assist && !manualTouchAim && this.sim.enemies.length && (input.fire || !pad)) {
         let enemy = this.sim.enemies[0];
         for (const e of this.sim.enemies) if (Math.hypot(e.x - p.x, e.y - p.y) < Math.hypot(enemy.x - p.x, enemy.y - p.y)) enemy = e;
         input.ax = enemy.x - p.x; input.ay = enemy.y - p.y;
@@ -197,7 +199,7 @@ export class JungleScene extends Phaser.Scene {
         this.sprite(`p${p.id}`, `monkey${p.id}`, p.x, p.y, 55, 55).setRotation(p.angle + Math.PI / 2).setAlpha(0.45).setDepth(p.y);
         over.lineStyle(3, 0xf4a69b, 0.8); over.strokeCircle(p.x, p.y, 35);
         if (p.reviveProgress) { over.lineStyle(5, 0xb2df93, 0.9); over.beginPath(); over.arc(p.x, p.y, 35, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p.reviveProgress / 1.6); over.strokePath(); }
-        this.label(`p${p.id}`, p.downTime > 0 ? `HOLD E / X TO REVIVE · ${Math.ceil(p.downTime)}s` : 'WAITING FOR NEXT WAVE', p.x, p.y + 45, '#ffc9b0', 11); continue;
+        this.label(`p${p.id}`, p.downTime > 0 ? `REVIVE NEARBY · E / X / ♡ · ${Math.ceil(p.downTime)}s` : 'OUT FOR THIS RUN', p.x, p.y + 45, '#ffc9b0', 11); continue;
       }
       g.lineStyle(2, colour, 0.7); g.strokeEllipse(p.x, p.y + 14, 42, 22); g.fillStyle(colour, 0.12); g.fillEllipse(p.x, p.y + 14, 42, 22);
       const tank = p.vehicleTime > 0;
@@ -270,7 +272,7 @@ export class JungleScene extends Phaser.Scene {
       if (this.shake) this.cameras.main.shake(120, 0.003);
     }
     if (event.kind === 'pickup' || event.kind === 'revive') { this.audio.pickup(); this.burst(x, y, 22, [0xc9e79a, 0xffdc83, 0xfff1bf]); this.floating(event.text ?? 'NICE!', x, y, '#eff4bd', true); }
-    if (event.kind === 'hurt') { this.audio.hurt(); this.burst(x, y, 15, [0xf1a18d, 0xe8b66d]); if (this.shake) this.cameras.main.shake(100, 0.0025); }
+    if (event.kind === 'hurt') { this.audio.hurt(); this.floating('−½ HEART', x, y, '#ffb1a1'); this.burst(x, y, 15, [0xf1a18d, 0xe8b66d]); if (this.shake) this.cameras.main.shake(100, 0.0025); }
     if (event.kind === 'dash') { this.audio.dash(); this.burst(x, y, 12, [0xefe3ad, 0xb3c880], 90); }
     if (event.kind === 'wave') { this.audio.wave(); this.hooks.banner(event.text ?? 'GO BANANAS!'); }
     if (event.kind === 'down') this.floating('MONKEY DOWN!', x, y, '#ffb1a1', true);

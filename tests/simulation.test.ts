@@ -70,7 +70,7 @@ test('four players, large crowds and many fruit shots maintain finite bounded st
 });
 
 test('three hearts lose exactly half a heart per jaguar hit, with protection between hits', () => {
-  const sim = fixture(); sim.continues = 0; const p = sim.players[0];
+  const sim = fixture(); const p = sim.players[0];
   assert.deepEqual(heartFills(p.hp), [1, 1, 1]);
   for (let hit = 1; hit <= 6; hit++) {
     p.invulnerable = 0; sim.damagePlayer(p);
@@ -79,6 +79,27 @@ test('three hearts lose exactly half a heart per jaguar hit, with protection bet
     if (hit < 6) { sim.damagePlayer(p); assert.equal(p.hp, 6 - hit); assert.equal(p.alive, true); }
   }
   assert.equal(p.alive, false); assert.deepEqual(heartFills(p.hp), [0, 0, 0]);
+  sim.update(1 / 60, new Map()); assert.equal(sim.mode, 'over');
+});
+
+test('real jaguar contact registers six half-heart hits and ends a default solo run', () => {
+  const sim = fixture(), p = sim.players[0]; p.invulnerable = 0;
+  sim.spawnEnemy('chaser'); const jaguar = sim.enemies[0]; jaguar.x = p.x; jaguar.y = p.y; jaguar.age = 2; jaguar.speed = 0;
+  let hits = 0;
+  for (let frame = 0; frame < 240 && sim.mode !== 'over'; frame++) {
+    sim.update(1 / 60, new Map());
+    hits += sim.events.filter(event => event.kind === 'hurt').length; sim.events = [];
+    assert.equal(p.hp, MAX_HEALTH - hits);
+    if (frame === 0) { assert.equal(p.hp, 5); assert.deepEqual(heartFills(p.hp), [1, 1, 0.5]); }
+    if (frame === 1) assert.equal(p.hp, 5); // One contact is not damage on every rendered frame.
+  }
+  assert.equal(hits, 6); assert.equal(p.hp, 0); assert.equal(p.alive, false); assert.equal(sim.mode, 'over');
+});
+
+test('clearing a wave does not silently refill lost health or revive a downed teammate', () => {
+  const sim = fixture(2), p = sim.players[0], friend = sim.players[1]; p.hp = 3; friend.hp = 0; friend.alive = false; friend.downTime = 0;
+  sim.toSpawn = 0; sim.enemies = []; sim.update(1 / 60, new Map()); assert.equal(sim.mode, 'break');
+  run(sim, 245); assert.equal(sim.wave, 2); assert.equal(p.hp, 3); assert.equal(friend.alive, false); assert.equal(friend.hp, 0);
 });
 
 test('healing fills one heart without exceeding the three-heart maximum', () => {

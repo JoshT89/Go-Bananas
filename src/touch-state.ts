@@ -10,6 +10,7 @@ export function stickVector(dx: number, dy: number, radius: number) {
 
 // Pointer identities are independent: aiming never steals the movement thumb.
 export class TouchState {
+  private active = false;
   move = { x: 0, y: 0 };
   aim = { x: 0, y: 0 };
   movePointer: number | null = null;
@@ -18,6 +19,7 @@ export class TouchState {
   revive = false;
   private bomb = false;
   private dash = false;
+  setActive(value: boolean) { this.active = value; if (!value) this.reset(); }
   begin(kind: 'move' | 'aim', pointerId: number) {
     if (kind === 'move') { if (this.movePointer !== null) return false; this.movePointer = pointerId; }
     else { if (this.aimPointer !== null) return false; this.aimPointer = pointerId; this.aimHeld = true; }
@@ -34,7 +36,7 @@ export class TouchState {
   queue(action: 'bomb' | 'dash') { this[action] = true; }
   read(): Input {
     return { ...idleInput(), mx: this.move.x, my: this.move.y, ax: this.aim.x, ay: this.aim.y,
-      fire: this.aimHeld, bomb: this.bomb, dash: this.dash, revive: this.revive };
+      fire: this.active, bomb: this.bomb, dash: this.dash, revive: this.revive };
   }
   consumeActions() { this.bomb = false; this.dash = false; }
   reset() { this.move = { x: 0, y: 0 }; this.aim = { x: 0, y: 0 }; this.movePointer = this.aimPointer = null; this.aimHeld = false; this.revive = false; this.consumeActions(); }

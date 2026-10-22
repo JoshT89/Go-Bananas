@@ -34,11 +34,11 @@ Choose **Solo** to start with one monkey. Choose **Local co-op**, then **2, 3, o
 Touch controls turn on automatically on touch devices and can also be enabled in Settings.
 
 - Drag the **left stick** to move.
-- Hold the **right stick** to fire at the nearest jaguar, or drag it to aim manually.
-- Use the **Bomb**, **Dash**, and **Revive** buttons between the sticks.
-- Portrait keeps the controls below the arena. Landscape uses the screen for the game and puts the sticks at the sides. Rotation, pause, losing focus, and cancelled touches clear held controls to prevent drifting or stuck firing.
+- **Shooting is automatic** during mobile play, even without touching either stick. Release the right stick to target the nearest jaguar, or drag it to aim manually.
+- **Bomb**, **Dash**, and **Revive** sit beside the left movement stick. Tap them with your movement thumb while keeping the right thumb on aim; bombs follow that aim.
+- Portrait keeps the controls below the arena. Landscape uses the screen for the game and puts the sticks at the sides. Rotation and cancelled touches clear held sticks; pause, game over, and losing focus stop automatic fire.
 
-Each monkey starts with **three hearts**. One jaguar hit takes **half a heart**, with brief protection between hits. Hearts are always visible above the arena and over each monkey, plus in squad cards. Healing restores one heart, and clearing a wave restores half a heart, up to the three-heart maximum.
+Each monkey starts with **three hearts**: **six unprotected jaguar hits** knock them out. Every hit immediately removes half a heart, shows a damage label, and grants 0.6 seconds to escape without taking damage on every frame of the same contact. There are no automatic extra lives or wave heals. Health pickups restore one heart, up to three. Shields and the Timber Tank visibly protect against hits. Hearts stay visible above the arena and each monkey, plus in squad cards; the footer shows hits remaining or active protection. A solo knockout ends the run. In co-op, a nearby teammate can revive a monkey within 14 seconds.
 
 ## This build
 
@@ -46,7 +46,7 @@ Each monkey starts with **three hearts**. One jaguar hit takes **half a heart**,
 - Three weapon types, melon bombs, dash, health, shields, temporary wooden tank, score combos, and saved best score.
 - Chasing, pouncing, heavy and boss jaguars, with visible attack warnings.
 - Six waves per chapter, three arena themes (jungle, lab, space), and a final victory at wave 18.
-- Local multiplayer input, downed teammates and revives, solo second chances.
+- Local multiplayer input, downed teammates and revives, six-hit solo survival.
 - Pause, immediate replay, instructions, audio/music options, aim assist, and reduced effects.
 - Synthesised sound effects and a simple musical loop. Fonts use Google Fonts with local fallback fonts.
 
@@ -68,4 +68,4 @@ Private publication uses the Sites manifest in `.openai/hosting.json`. The game 
 
 ## Verification
 
-Automated checks cover combat, three-heart damage/healing, revives, wave progression, four-player crowds, local player counts, controller assignment, two independent touch pointers, touch cancellation, and movement plus firing through the simulation. Browser checks cover portrait/landscape phone sizes, starting, stick movement and firing, touch bombs and dash, health visibility, pause, changing players, settings, and restart. Physical phones and controller mappings still benefit from device testing. Online multiplayer is not included in this build.
+Automated checks cover combat, actual six-hit jaguar contact, health pickups, revives, wave progression without passive healing, four-player crowds, player counts, controller assignment, automatic fire without an aiming touch, independent touch pointers, pause cancellation, and bombs while aiming. Browser checks cover portrait/landscape phone sizes, starting, stick movement and firing, touch bombs and dash, health visibility, pause, changing players, settings, and restart. Physical phones and controller mappings still benefit from device testing. Online multiplayer is not included in this build.

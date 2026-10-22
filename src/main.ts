@@ -65,7 +65,7 @@ $('#app').innerHTML = `
               <div class="game-overlay hidden" id="end-overlay"><div class="overlay-panel end-panel"><div class="eyebrow" id="end-eyebrow">A NOBLE FOOD FIGHT</div><h2 id="end-title">THAT WAS<br><span>BANANAS.</span></h2><p id="end-subtitle">Every great monkey gets another shot.</p><div class="end-stats" id="end-stats"></div><button class="start-button" id="retry">ONE MORE RUN ${icon('arrow')}</button><button class="subtle-button" id="back-lobby">BACK TO BASE CAMP</button></div></div>
               <div class="loading" id="loading"><span class="loading-spinner"></span>PACKING THE BANANAS…</div>
             </div>
-            <div class="game-bottom-bar"><span>${icon('bolt')} <b id="game-status">YOUR JUNGLE. YOUR RULES. THEIR PROBLEM.</b></span><span id="continue-count">2 SECOND CHANCES</span></div>
+            <div class="game-bottom-bar"><span>${icon('bolt')} <b id="game-status">YOUR JUNGLE. YOUR RULES. THEIR PROBLEM.</b></span><span id="health-rule">3 HEARTS · 6 HITS</span></div>
           </div>
           <div class="squad-heading"><span>THE BANANA BUNCH <b id="squad-count">01 / 04</b></span><span>CONNECT CONTROLLERS TO BRING THE CREW ${icon('pad')}</span></div>
           <div class="squad" id="squad">${[0, 1, 2, 3].map(id => `<button class="player-card ${id === 0 ? 'joined' : 'empty'}" data-player="${id}" ${id === 0 ? 'disabled' : ''} style="--player:${PLAYER_COLOURS[id]}"><div class="player-portrait">${monkeyPortrait(PLAYER_COLOURS[id])}</div><div class="player-copy"><span class="player-number">PLAYER 0${id + 1}</span><strong>${id === 0 ? PLAYER_NAMES[id] : 'BRING A FRIEND'}</strong><div class="player-detail">${id === 0 ? '● READY FOR ACTION' : '+ CONNECT CONTROLLER'}</div></div><div class="player-hearts"></div></button>`).join('')}</div>
@@ -94,15 +94,15 @@ $('#game-frame').insertAdjacentHTML('beforebegin', `
 $('.game-topbar').insertAdjacentHTML('afterend', '<div class="run-health" id="run-health" aria-label="Squad health"></div>');
 $('#canvas-wrap').insertAdjacentHTML('afterend', `
   <div class="touch-controls hidden inactive" id="touch-controls" aria-label="Touch game controls">
-    <div class="stick-group"><button class="touch-stick move-stick" data-stick="move" aria-label="Move monkey: drag the left stick" disabled><span class="stick-cross"></span><span class="stick-nub">${icon('arrow')}</span></button><span>MOVE</span></div>
+    <div class="touch-left"><div class="stick-group"><button class="touch-stick move-stick" data-stick="move" aria-label="Move monkey: drag the left stick" disabled><span class="stick-cross"></span><span class="stick-nub">${icon('arrow')}</span></button><span>MOVE</span></div>
     <div class="touch-actions"><button data-action="bomb" aria-label="Throw melon bomb" disabled>${icon('bomb')}<span>BOMB <b id="touch-bombs">3</b></span></button><button data-action="dash" aria-label="Dash" disabled>${icon('bolt')}<span id="touch-dash">DASH</span></button><button data-action="revive" aria-label="Hold to revive a nearby monkey" disabled>${icon('heart')}<span>REVIVE</span></button></div>
-    <div class="stick-group"><button class="touch-stick aim-stick" data-stick="aim" aria-label="Aim and fire: hold to shoot, drag to aim" disabled><span class="stick-cross"></span><span class="stick-nub">${icon('target')}</span></button><span>AIM + FIRE</span></div>
-    <p>Left thumb moves · Right thumb shoots · Drag right to aim</p>
+    </div><div class="stick-group aim-group"><button class="touch-stick aim-stick" data-stick="aim" aria-label="Aim monkey: drag the right stick, firing is automatic" disabled><span class="stick-cross"></span><span class="stick-nub">${icon('target')}</span></button><span>AIM · AUTO-FIRE</span></div>
+    <p>Auto-fire is on · Left thumb moves · Right thumb aims</p>
   </div>`);
 $('#pause-overlay .overlay-panel').insertAdjacentHTML('beforeend', '<button class="subtle-button" id="pause-to-lobby">CHANGE PLAYERS / BASE CAMP</button>');
-$('.settings-list').insertAdjacentHTML('beforeend', `<label><span><b>TOUCH CONTROLS</b><small>Left thumb to move. Right thumb to aim and fire.</small></span><input type="checkbox" name="touch" ${settings.touch ? 'checked' : ''}><span class="toggle"></span></label>`);
+$('.settings-list').insertAdjacentHTML('beforeend', `<label><span><b>TOUCH CONTROLS</b><small>Automatic fire. Left thumb moves, right thumb aims.</small></span><input type="checkbox" name="touch" ${settings.touch ? 'checked' : ''}><span class="toggle"></span></label>`);
 $('#controls-dialog .control-table').insertAdjacentHTML('afterbegin', '<div><b>PHONE / TABLET</b><span>Left stick moves · Right stick shoots</span></div>');
-$('#controls-dialog .dialog-tip').insertAdjacentHTML('beforebegin', '<p class="dialog-tip">You have 3 hearts. Each jaguar hit costs half a heart. Your health is always above the arena and over your monkey. On a phone, hold the right stick to auto-aim, or drag it to aim manually. Use the BOMB and DASH buttons between the sticks.</p>');
+$('#controls-dialog .dialog-tip').insertAdjacentHTML('beforebegin', '<p class="dialog-tip">You have 3 hearts: 6 jaguar hits and you’re down. Each hit takes half a heart, with a short grace period to escape. There are no automatic extra lives or wave heals; health pickups restore one heart. On mobile, shooting is automatic. Drag the left stick to move and the right stick to aim; release aim to target the nearest jaguar. BOMB, DASH and REVIVE sit beside movement, so your aiming thumb can stay in place.</p>');
 $('#controls-dialog .dialog-tip:last-of-type').textContent = 'Choose Solo for one monkey, or Local co-op and 2, 3, or 4 players before starting. Friends on the same screen need a controller each; press any button so the browser detects them. Choose “A controller” for Player 1 if everyone is using controllers. You can change players from the pause menu. Online friend invites are not included yet.';
 const touchControls = new TouchControls($('#touch-controls'));
 let healthKey = '';
@@ -154,7 +154,6 @@ function hud(sim: Simulation) {
   $('#wave').textContent = String(sim.wave).padStart(2, '0'); $('#score').textContent = String(sim.score).padStart(6, '0');
   $('#enemies').textContent = String(sim.enemies.length + sim.toSpawn); $('#run-time').textContent = formatTime(sim.time);
   $('#combo').textContent = sim.combo >= 3 ? `${sim.combo} COMBO ×${Math.min(5, 1 + Math.floor(sim.combo / 10))}` : '';
-  $('#continue-count').textContent = `${sim.continues} SECOND CHANCE${sim.continues === 1 ? '' : 'S'}`;
   const world = WORLDS[sim.world]; $('#world-title').textContent = world.name; $('#world-sub').textContent = world.sub; $('#location-name').textContent = world.name;
   $('#chapter').textContent = $('#chapter-number').textContent = String(sim.world + 1).padStart(2, '0');
   const localWave = (sim.wave - 1) % 6;
@@ -166,14 +165,17 @@ function hud(sim: Simulation) {
   else if (boss) $('#intermission').innerHTML = `<span>${sim.world === 0 ? 'KING CLAW' : sim.world === 1 ? 'PROFESSOR PURR' : 'ADMIRAL CLAW'}</span><div class="boss-track"><i style="width:${Math.max(0, boss.hp / boss.maxHp * 100)}%"></i></div>`;
   for (const p of sim.players) {
     const card = $<HTMLButtonElement>(`[data-player="${p.id}"]`);
-    card.querySelector('.player-detail')!.innerHTML = p.alive ? `<span class="health-icons">${healthIcons(p.hp)}</span>` : p.downTime > 0 ? `DOWN · ${Math.ceil(p.downTime)}s TO REVIVE` : 'WAITING FOR NEXT WAVE';
+    card.querySelector('.player-detail')!.innerHTML = p.alive ? `<span class="health-icons">${healthIcons(p.hp)}</span>` : p.downTime > 0 ? `DOWN · ${Math.ceil(p.downTime)}s TO REVIVE` : 'OUT FOR THIS RUN';
     card.querySelector('strong')!.textContent = PLAYER_NAMES[p.id];
     card.classList.toggle('down', !p.alive);
     card.querySelector('.player-number')!.textContent = p.vehicleTime > 0 ? `TANK · ${Math.ceil(p.vehicleTime)}s` : `${WEAPONS[p.weapon].name}${p.weaponTime > 0 ? ` · ${Math.ceil(p.weaponTime)}s` : ''}`;
   }
   const p = sim.players.find(p => p.id === 0)!;
+  const healthTip = document.querySelector<HTMLElement>('#run-health .health-explainer');
+  if (healthTip) healthTip.textContent = p.vehicleTime > 0 ? 'TANK · PROTECTED' : p.shield > 0 ? `SHIELD · ${p.shield} HITS BLOCKED` : '1 JAGUAR HIT = ½ HEART';
   $('#touch-bombs').textContent = String(p.bombs); $('#touch-dash').textContent = p.dashCd > 0 ? `${p.dashCd.toFixed(1)}s` : 'DASH';
-  $('#game-status').innerHTML = `${p.vehicleTime > 0 ? `TIMBER TANK · ${Math.ceil(p.vehicleTime)}s` : WEAPONS[p.weapon].name} <span class="status-divider">/</span> ${p.bombs} MELON BOMBS <span class="status-divider">/</span> DASH ${p.dashCd > 0 ? `${p.dashCd.toFixed(1)}s` : 'READY'}`;
+  $('#health-rule').textContent = p.vehicleTime > 0 ? 'TANK PROTECTION' : p.shield > 0 ? `SHIELD · ${p.shield} BLOCKS` : p.alive ? `${p.hp} HIT${p.hp === 1 ? '' : 'S'} LEFT` : 'MONKEY DOWN';
+  $('#game-status').innerHTML = `${settings.touch && !scene.controllerOnly ? 'AUTO-FIRE · ' : ''}${p.vehicleTime > 0 ? `TIMBER TANK · ${Math.ceil(p.vehicleTime)}s` : WEAPONS[p.weapon].name} <span class="status-divider">/</span> ${p.bombs} MELON BOMBS <span class="status-divider">/</span> DASH ${p.dashCd > 0 ? `${p.dashCd.toFixed(1)}s` : 'READY'}`;
 }
 function start() {
   if (!localSquad(requestedPlayers, connected.length, scene.controllerOnly ? 'controllers' : 'mixed').canStart) return;
@@ -223,7 +225,7 @@ function backToLobby() {
   $('#location-name').textContent = $('#world-title').textContent = WORLDS[0].name; $('#world-sub').textContent = WORLDS[0].sub;
   $('#run-time').textContent = '00:00'; $('#chapter').textContent = $('#chapter-number').textContent = '01';
   $('#chapter-progress').innerHTML = Array.from({ length: 6 }, (_, i) => `<i class="${i === 0 ? 'current' : ''}"></i>`).join('');
-  $('#game-status').textContent = 'YOUR JUNGLE. YOUR RULES. THEIR PROBLEM.'; $('#continue-count').textContent = '2 SECOND CHANCES';
+  $('#game-status').textContent = 'YOUR JUNGLE. YOUR RULES. THEIR PROBLEM.'; $('#health-rule').textContent = '3 HEARTS · 6 HITS';
   updateSquad();
 }
 $('#back-lobby').addEventListener('click', backToLobby); $('#pause-to-lobby').addEventListener('click', backToLobby);
