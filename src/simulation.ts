@@ -1,4 +1,5 @@
 // Browser-independent rules. The same simulation can later run in a game room.
+import { MAX_HEALTH, REVIVE_HEALTH } from './health';
 export const WIDTH = 1280;
 export const HEIGHT = 768;
 export const PLAYER_COLOURS = ['#f4bd4f', '#79c5dd', '#ed8f9b', '#b5d77e'];
@@ -65,7 +66,7 @@ export class Simulation {
   addPlayer(id: number) {
     if (this.players.some(p => p.id === id) || this.players.length >= 4) return;
     this.players.push({ id, x: WIDTH / 2 + (id - 1.5) * 52, y: HEIGHT / 2 + 55,
-      angle: -Math.PI / 2, hp: 5, invulnerable: 2, dashCd: 0, dashTime: 0, dashX: 0, dashY: 0,
+      angle: -Math.PI / 2, hp: MAX_HEALTH, invulnerable: 2, dashCd: 0, dashTime: 0, dashX: 0, dashY: 0,
       fireCd: 0, bombs: 3, weapon: 'banana', weaponTime: 0, vehicleTime: 0, shield: 0,
       alive: true, downTime: 0, reviveProgress: 0, kills: 0 });
   }
@@ -87,7 +88,7 @@ export class Simulation {
     this.spawnClock = 0.65;
     if (localWave === 6) { this.spawnEnemy('boss'); this.bossSpawned = true; this.waveTotal++; }
     for (const p of this.players) {
-      if (!p.alive && p.downTime <= 0 && this.continues > 0) { this.continues--; p.alive = true; p.hp = 4; p.invulnerable = 3; }
+      if (!p.alive && p.downTime <= 0 && this.continues > 0) { this.continues--; p.alive = true; p.hp = REVIVE_HEALTH; p.invulnerable = 3; }
       p.bombs = Math.min(5, p.bombs + (this.wave > 1 ? 1 : 0));
     }
     this.events.push({ kind: 'wave', x: WIDTH / 2, y: HEIGHT / 2, text: localWave === 6 ? (this.world === 0 ? 'KING CLAW APPROACHES' : this.world === 1 ? 'PROFESSOR PURR APPROACHES' : 'ADMIRAL CLAW APPROACHES') : `WAVE ${String(this.wave).padStart(2, '0')}` });
@@ -169,7 +170,7 @@ export class Simulation {
     this.events.push({ kind: 'hurt', x: p.x, y: p.y, owner: p.id });
     if (p.hp > 0) return;
     if (this.players.length === 1 && this.continues > 0) {
-      this.continues--; p.hp = 5; p.invulnerable = 3;
+      this.continues--; p.hp = MAX_HEALTH; p.invulnerable = 3;
       this.explode(p.x, p.y, 200, 150, p.id);
       this.events.push({ kind: 'revive', x: p.x, y: p.y, text: 'SECOND CHANCE!' });
     } else { p.alive = false; p.downTime = 14; this.events.push({ kind: 'down', x: p.x, y: p.y, owner: p.id }); }
@@ -177,11 +178,11 @@ export class Simulation {
   collect(p: Player, item: Pickup) {
     if (item.kind === 'nuts' || item.kind === 'coconut') { p.weapon = item.kind; p.weaponTime = 18; }
     if (item.kind === 'bomb') p.bombs = Math.min(6, p.bombs + 2);
-    if (item.kind === 'heal') p.hp = Math.min(5, p.hp + 2);
+    if (item.kind === 'heal') p.hp = Math.min(MAX_HEALTH, p.hp + 2);
     if (item.kind === 'tank') p.vehicleTime = 12;
     if (item.kind === 'shield') p.shield = Math.min(3, p.shield + 2);
     item.life = 0;
-    const text = item.kind === 'nuts' ? 'NUTCRACKER!' : item.kind === 'coconut' ? 'COCONUT CANNON!' : item.kind === 'tank' ? 'TIMBER TANK!' : item.kind === 'heal' ? '+2 HEARTS' : item.kind === 'bomb' ? '+2 MELON BOMBS' : 'MONKEY SHIELD!';
+    const text = item.kind === 'nuts' ? 'NUTCRACKER!' : item.kind === 'coconut' ? 'COCONUT CANNON!' : item.kind === 'tank' ? 'TIMBER TANK!' : item.kind === 'heal' ? '+1 HEART' : item.kind === 'bomb' ? '+2 MELON BOMBS' : 'MONKEY SHIELD!';
     this.events.push({ kind: 'pickup', x: p.x, y: p.y, text, owner: p.id });
   }
   private contain(body: { x: number; y: number }, radius: number) {
@@ -202,7 +203,7 @@ export class Simulation {
         p.downTime = Math.max(0, p.downTime - dt);
         const rescuer = this.players.find(other => other.alive && dist(p, other) < 76 && inputs.get(other.id)?.revive);
         p.reviveProgress = rescuer && p.downTime > 0 ? p.reviveProgress + dt : Math.max(0, p.reviveProgress - dt);
-        if (p.reviveProgress >= 1.6) { p.alive = true; p.hp = 3; p.invulnerable = 3; p.reviveProgress = 0; this.events.push({ kind: 'revive', x: p.x, y: p.y, text: 'BACK IN BUSINESS!' }); }
+        if (p.reviveProgress >= 1.6) { p.alive = true; p.hp = REVIVE_HEALTH; p.invulnerable = 3; p.reviveProgress = 0; this.events.push({ kind: 'revive', x: p.x, y: p.y, text: 'BACK IN BUSINESS!' }); }
         continue;
       }
       const input = inputs.get(p.id) ?? idleInput();
@@ -291,8 +292,8 @@ export class Simulation {
       else {
         this.mode = 'break'; this.breakTime = this.wave % 6 === 0 ? 7 : 4;
         this.score += 150 * this.wave;
-        for (const p of this.players) if (p.alive) p.hp = Math.min(5, p.hp + 1);
-        this.events.push({ kind: 'wave', x: WIDTH / 2, y: HEIGHT / 2, text: this.wave % 6 === 0 ? 'PORTAL OPEN! NEXT STOP…' : 'WAVE CLEARED! +1 HEART' });
+        for (const p of this.players) if (p.alive) p.hp = Math.min(MAX_HEALTH, p.hp + 1);
+        this.events.push({ kind: 'wave', x: WIDTH / 2, y: HEIGHT / 2, text: this.wave % 6 === 0 ? 'PORTAL OPEN! NEXT STOP…' : 'WAVE CLEARED! +½ HEART' });
       }
     }
   }

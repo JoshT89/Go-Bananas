@@ -1,9 +1,13 @@
 import Phaser from 'phaser';
 import './style.css';
+import './mobile.css';
 import { JungleScene } from './scene';
 import { monkeyPortrait } from './art';
 import { WIDTH, HEIGHT, WORLDS, PLAYER_NAMES, PLAYER_COLOURS, WEAPONS } from './simulation';
 import type { Simulation } from './simulation';
+import { heartFills, MAX_HEALTH } from './health';
+import { localSquad } from './local-lobby';
+import { TouchControls } from './touch-controls';
 
 const paths: Record<string, string> = {
   banana: '<path d="M18 3c3 10-4 20-15 16-2-1-3-3-2-5 9 4 15-2 15-10Z"/><path d="m16 4 1-3 3 1-1 3"/>',
@@ -27,9 +31,9 @@ const paths: Record<string, string> = {
 };
 const icon = (name: string, cls = '') => `<svg class="icon ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] ?? paths.leaf}</svg>`;
 const $ = <T extends HTMLElement = HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
-let selected = [0], connected: number[] = [], started = false, bannerTimer: ReturnType<typeof setTimeout>;
-type Settings = { sound: boolean; music: boolean; shake: boolean; reduced: boolean; assist: boolean };
-const settings: Settings = { sound: true, music: true, shake: true, reduced: false, assist: false };
+let selected = [0], connected: number[] = [], requestedPlayers = 1, started = false, bannerTimer: ReturnType<typeof setTimeout>;
+type Settings = { sound: boolean; music: boolean; shake: boolean; reduced: boolean; assist: boolean; touch: boolean };
+const settings: Settings = { sound: true, music: true, shake: true, reduced: false, assist: false, touch: matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0 };
 let best = 0;
 try { best = Number(localStorage.getItem('bb-best') ?? 0); Object.assign(settings, JSON.parse(localStorage.getItem('bb-settings') ?? '{}')); } catch { /* Storage can be unavailable in private browsing. */ }
 const saveSettings = () => { try { localStorage.setItem('bb-settings', JSON.stringify(settings)); } catch { /* Optional persistence. */ } };
@@ -81,30 +85,72 @@ $('#app').innerHTML = `
   <dialog id="settings-dialog"><button class="dialog-close" aria-label="Close settings">${icon('close')}</button><div class="eyebrow">TUNE YOUR JUNGLE</div><h2>YOUR KIND<br><span>OF CHAOS.</span></h2><p>Less shaking? More banana music? You’re in charge.</p><div class="settings-list">${([['sound', 'SOUND EFFECTS', 'Fruit with a little more crunch.'], ['music', 'JUNGLE GROOVE', 'A little rhythm for the food fight.'], ['shake', 'SCREEN SHAKE', 'Give those melon bombs some weight.'], ['reduced', 'GENTLE EFFECTS', 'Reduce flashes and explosion particles.'], ['assist', 'AIM ASSIST', 'Aim at the nearest jaguar. Hold fire or J to shoot.']] as const).map(([key, title, text]) => `<label><span><b>${title}</b><small>${text}</small></span><input type="checkbox" name="${key}" ${settings[key] ? 'checked' : ''}><span class="toggle"></span></label>`).join('')}</div><button class="start-button dialog-done">ALL SET ${icon('arrow')}</button></dialog>
 `;
 
+$('#game-frame').insertAdjacentHTML('beforebegin', `
+  <section class="play-setup" aria-label="Choose player count">
+    <div class="mode-picker"><span>HOW MANY MONKEYS?</span><div role="group" aria-label="Game mode"><button id="solo-mode" class="chosen" aria-pressed="true">${icon('banana')} SOLO <b>1 PLAYER</b></button><button id="coop-mode" aria-pressed="false">${icon('pad')} LOCAL CO-OP <b>2–4 PLAYERS</b></button></div></div>
+    <div id="coop-setup" class="coop-setup hidden"><div class="player-count-picker" role="group" aria-label="Number of local players">${[2, 3, 4].map(count => `<button data-count="${count}" aria-pressed="false">${count} PLAYERS</button>`).join('')}</div><label class="host-control-label">PLAYER 1 USES <select id="host-control"><option value="mixed">Keyboard / touch</option><option value="controllers">A controller</option></select></label></div>
+    <p id="join-help" role="status">One monkey. All the fruit. Ready when you are.</p>
+  </section>`);
+$('.game-topbar').insertAdjacentHTML('afterend', '<div class="run-health" id="run-health" aria-label="Squad health"></div>');
+$('#canvas-wrap').insertAdjacentHTML('afterend', `
+  <div class="touch-controls hidden inactive" id="touch-controls" aria-label="Touch game controls">
+    <div class="stick-group"><button class="touch-stick move-stick" data-stick="move" aria-label="Move monkey: drag the left stick" disabled><span class="stick-cross"></span><span class="stick-nub">${icon('arrow')}</span></button><span>MOVE</span></div>
+    <div class="touch-actions"><button data-action="bomb" aria-label="Throw melon bomb" disabled>${icon('bomb')}<span>BOMB <b id="touch-bombs">3</b></span></button><button data-action="dash" aria-label="Dash" disabled>${icon('bolt')}<span id="touch-dash">DASH</span></button><button data-action="revive" aria-label="Hold to revive a nearby monkey" disabled>${icon('heart')}<span>REVIVE</span></button></div>
+    <div class="stick-group"><button class="touch-stick aim-stick" data-stick="aim" aria-label="Aim and fire: hold to shoot, drag to aim" disabled><span class="stick-cross"></span><span class="stick-nub">${icon('target')}</span></button><span>AIM + FIRE</span></div>
+    <p>Left thumb moves · Right thumb shoots · Drag right to aim</p>
+  </div>`);
+$('#pause-overlay .overlay-panel').insertAdjacentHTML('beforeend', '<button class="subtle-button" id="pause-to-lobby">CHANGE PLAYERS / BASE CAMP</button>');
+$('.settings-list').insertAdjacentHTML('beforeend', `<label><span><b>TOUCH CONTROLS</b><small>Left thumb to move. Right thumb to aim and fire.</small></span><input type="checkbox" name="touch" ${settings.touch ? 'checked' : ''}><span class="toggle"></span></label>`);
+$('#controls-dialog .control-table').insertAdjacentHTML('afterbegin', '<div><b>PHONE / TABLET</b><span>Left stick moves · Right stick shoots</span></div>');
+$('#controls-dialog .dialog-tip').insertAdjacentHTML('beforebegin', '<p class="dialog-tip">You have 3 hearts. Each jaguar hit costs half a heart. Your health is always above the arena and over your monkey. On a phone, hold the right stick to auto-aim, or drag it to aim manually. Use the BOMB and DASH buttons between the sticks.</p>');
+$('#controls-dialog .dialog-tip:last-of-type').textContent = 'Choose Solo for one monkey, or Local co-op and 2, 3, or 4 players before starting. Friends on the same screen need a controller each; press any button so the browser detects them. Choose “A controller” for Player 1 if everyone is using controllers. You can change players from the pause menu. Online friend invites are not included yet.';
+const touchControls = new TouchControls($('#touch-controls'));
+let healthKey = '';
+function healthIcons(hp: number) {
+  return heartFills(hp).map(fill => `<span class="health-heart" aria-hidden="true">${icon('heart')}<span class="heart-fill" style="width:${fill * 100}%">${icon('heart')}</span></span>`).join('');
+}
+function renderHealth(players: { id: number; hp: number; alive: boolean }[]) {
+  const key = players.map(p => `${p.id}:${p.hp}:${p.alive}`).join('|');
+  if (key === healthKey) return; healthKey = key;
+  $('#run-health').innerHTML = players.map(p => `<div class="monkey-health ${p.hp <= 2 ? 'low-health' : ''}" style="--player:${PLAYER_COLOURS[p.id]}" role="group" aria-label="${PLAYER_NAMES[p.id]} health: ${p.alive ? p.hp / 2 : 0} of 3 hearts"><b>P${p.id + 1}<span>${PLAYER_NAMES[p.id]}</span></b><span class="health-icons">${healthIcons(p.alive ? p.hp : 0)}</span><strong>${p.alive ? p.hp / 2 : 0}<small>/3</small></strong></div>`).join('') + (players.length === 1 ? '<span class="health-explainer">1 JAGUAR HIT = ½ HEART</span>' : '');
+}
+
 const formatTime = (seconds: number) => `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 function updateSquad() {
-  const availability = scene.controllerOnly ? Math.max(1, connected.length) : Math.min(4, connected.length + 1);
-  selected = selected.filter(id => id < availability);
-  if (!selected.includes(0)) selected.unshift(0);
+  const squad = localSquad(requestedPlayers, connected.length, scene.controllerOnly ? 'controllers' : 'mixed');
+  selected = squad.ids;
   $('[id="squad-count"]').textContent = `${String(selected.length).padStart(2, '0')} / 04`;
-  $('#squad-note').textContent = `${selected.length === 1 ? 'SOLO RUN' : `${selected.length}-MONKEY SQUAD`} · NO MONKEY LEFT BEHIND`;
+  $('#squad-note').textContent = squad.canStart ? `${selected.length === 1 ? 'SOLO RUN' : `${selected.length}-MONKEY LOCAL SQUAD`} · READY TO PLAY` : `CONNECT ${squad.missingControllers} MORE CONTROLLER${squad.missingControllers === 1 ? '' : 'S'} TO START`;
+  $('#solo-mode').classList.toggle('chosen', requestedPlayers === 1); $('#solo-mode').setAttribute('aria-pressed', String(requestedPlayers === 1));
+  $('#coop-mode').classList.toggle('chosen', requestedPlayers > 1); $('#coop-mode').setAttribute('aria-pressed', String(requestedPlayers > 1));
+  $('#coop-setup').classList.toggle('hidden', requestedPlayers === 1);
+  document.querySelectorAll<HTMLButtonElement>('[data-count]').forEach(button => { button.classList.toggle('chosen', Number(button.dataset.count) === requestedPlayers); button.setAttribute('aria-pressed', String(Number(button.dataset.count) === requestedPlayers)); });
+  $('#join-help').textContent = requestedPlayers === 1 ? scene.controllerOnly && !squad.canStart ? 'Connect a controller and press any button, or switch back to keyboard / touch below the start button.' : 'Solo: use keyboard + mouse, touch controls, or choose a controller below.' : squad.canStart ? `${requestedPlayers} local players ready on this screen. Each friend has their own controller. Online invites are not available yet.` : `Local co-op is on one screen. Connect ${squad.requiredControllers} controller${squad.requiredControllers === 1 ? '' : 's'}${scene.controllerOnly ? '' : ' for your friends'} and press a button on each. ${connected.length} detected; ${squad.missingControllers} more needed. Online invites are not available yet.`;
+  $('#join-help').classList.toggle('needs-controllers', !squad.canStart);
   for (let id = 0; id < 4; id++) {
-    const card = $<HTMLButtonElement>(`[data-player="${id}"]`), joined = selected.includes(id), available = id < availability;
-    card.classList.toggle('joined', joined); card.classList.toggle('empty', !joined); if (!started) { card.classList.remove('down'); card.querySelector('.player-number')!.textContent = `PLAYER 0${id + 1}`; } card.disabled = started || id === 0 || !available;
-    card.querySelector('strong')!.textContent = joined ? PLAYER_NAMES[id] : available ? `ADD ${PLAYER_NAMES[id]}` : 'BRING A FRIEND';
-    card.querySelector('.player-detail')!.textContent = joined ? (scene.controllerOnly || id > 0 ? '● CONTROLLER READY' : '● READY FOR ACTION') : available ? '+ JOIN THE SQUAD' : '+ CONNECT CONTROLLER';
+    const card = $<HTMLButtonElement>(`[data-player="${id}"]`), joined = selected.includes(id);
+    const padIndex = scene.controllerOnly ? id : id - 1;
+    const ready = (!scene.controllerOnly && id === 0) || connected[padIndex] !== undefined;
+    card.classList.toggle('joined', joined && ready); card.classList.toggle('empty', !joined || !ready); if (!started) { card.classList.remove('down'); card.querySelector('.player-number')!.textContent = `PLAYER 0${id + 1}`; } card.disabled = started || id === 0;
+    card.querySelector('strong')!.textContent = joined ? PLAYER_NAMES[id] : `ADD ${PLAYER_NAMES[id]}`;
+    card.querySelector('.player-detail')!.textContent = joined ? ready ? (scene.controllerOnly || id > 0 ? '● CONTROLLER READY' : settings.touch ? '● TOUCH CONTROLS READY' : '● KEYBOARD + MOUSE') : 'PRESS A CONTROLLER BUTTON' : '+ CHOOSE LOCAL CO-OP';
   }
-  $<HTMLButtonElement>('#start').disabled = scene.controllerOnly && !connected.length;
+  $<HTMLButtonElement>('#start').disabled = !squad.canStart;
+  $('#input-mode').innerHTML = `${icon('pad')} ${scene.controllerOnly ? 'ALL CONTROLLERS' : settings.touch ? 'TOUCH + CONTROLLERS' : 'KEYBOARD + CONTROLLERS'} ${icon('arrow')}`;
+  if (!started) renderHealth(selected.map(id => ({ id, hp: MAX_HEALTH, alive: true })));
 }
 function applySettings() {
   scene.audio.setEnabled(settings.sound); scene.audio.music = settings.music && !scene.paused;
   scene.shake = settings.shake && !settings.reduced; scene.reduced = settings.reduced; scene.assist = settings.assist;
+  touchControls.setEnabled(settings.touch); document.documentElement.classList.toggle('touch-mode', settings.touch);
   $('#sound').innerHTML = icon(settings.sound ? 'sound' : 'muted'); $('#sound').setAttribute('aria-label', settings.sound ? 'Mute audio' : 'Unmute audio');
   for (const key of Object.keys(settings) as (keyof Settings)[]) $<HTMLInputElement>(`[name="${key}"]`).checked = settings[key];
 }
 function showBanner(text: string) { clearTimeout(bannerTimer); const el = $('#wave-banner'); el.textContent = text; el.classList.add('show'); bannerTimer = setTimeout(() => el.classList.remove('show'), 2300); }
 function hud(sim: Simulation) {
   if (!started) return;
+  renderHealth(sim.players);
+  touchControls.setPlaying(!scene.paused && (sim.mode === 'playing' || sim.mode === 'break'));
   $('#wave').textContent = String(sim.wave).padStart(2, '0'); $('#score').textContent = String(sim.score).padStart(6, '0');
   $('#enemies').textContent = String(sim.enemies.length + sim.toSpawn); $('#run-time').textContent = formatTime(sim.time);
   $('#combo').textContent = sim.combo >= 3 ? `${sim.combo} COMBO ×${Math.min(5, 1 + Math.floor(sim.combo / 10))}` : '';
@@ -120,28 +166,33 @@ function hud(sim: Simulation) {
   else if (boss) $('#intermission').innerHTML = `<span>${sim.world === 0 ? 'KING CLAW' : sim.world === 1 ? 'PROFESSOR PURR' : 'ADMIRAL CLAW'}</span><div class="boss-track"><i style="width:${Math.max(0, boss.hp / boss.maxHp * 100)}%"></i></div>`;
   for (const p of sim.players) {
     const card = $<HTMLButtonElement>(`[data-player="${p.id}"]`);
-    card.querySelector('.player-detail')!.innerHTML = p.alive ? `<span class="hearts">${Array.from({ length: 5 }, (_, i) => `<i class="${i < p.hp ? 'full' : ''}">♥</i>`).join('')}</span>` : p.downTime > 0 ? `DOWN · ${Math.ceil(p.downTime)}s TO REVIVE` : 'WAITING FOR NEXT WAVE';
+    card.querySelector('.player-detail')!.innerHTML = p.alive ? `<span class="health-icons">${healthIcons(p.hp)}</span>` : p.downTime > 0 ? `DOWN · ${Math.ceil(p.downTime)}s TO REVIVE` : 'WAITING FOR NEXT WAVE';
     card.querySelector('strong')!.textContent = PLAYER_NAMES[p.id];
     card.classList.toggle('down', !p.alive);
     card.querySelector('.player-number')!.textContent = p.vehicleTime > 0 ? `TANK · ${Math.ceil(p.vehicleTime)}s` : `${WEAPONS[p.weapon].name}${p.weaponTime > 0 ? ` · ${Math.ceil(p.weaponTime)}s` : ''}`;
   }
   const p = sim.players.find(p => p.id === 0)!;
+  $('#touch-bombs').textContent = String(p.bombs); $('#touch-dash').textContent = p.dashCd > 0 ? `${p.dashCd.toFixed(1)}s` : 'DASH';
   $('#game-status').innerHTML = `${p.vehicleTime > 0 ? `TIMBER TANK · ${Math.ceil(p.vehicleTime)}s` : WEAPONS[p.weapon].name} <span class="status-divider">/</span> ${p.bombs} MELON BOMBS <span class="status-divider">/</span> DASH ${p.dashCd > 0 ? `${p.dashCd.toFixed(1)}s` : 'READY'}`;
 }
 function start() {
-  if (scene.controllerOnly && !connected.length) return;
+  if (!localSquad(requestedPlayers, connected.length, scene.controllerOnly ? 'controllers' : 'mixed').canStart) return;
   started = true; $('#lobby').classList.add('hidden'); $('#end-overlay').classList.add('hidden'); $('#pause-overlay').classList.add('hidden');
   $('#in-game-hud').classList.remove('hidden'); $('#game-frame').classList.add('running'); $<HTMLButtonElement>('#pause').disabled = false;
   scene.start(selected); applySettings(); updateSquad();
+  touchControls.setPlaying(true); $('.play-setup').classList.add('hidden');
+  if (settings.touch) $('#game-frame').scrollIntoView({ block: 'start' });
   $('#pause').innerHTML = icon('pause'); $('#pause').setAttribute('aria-label', 'Pause game');
 }
 function pause(value: boolean) {
   if (!started || scene.sim.mode === 'over' || scene.sim.mode === 'won') return;
   scene.paused = value; scene.audio.music = settings.music && !value; $('#pause-overlay').classList.toggle('hidden', !value);
+  touchControls.setPlaying(!value);
   $('#pause').innerHTML = icon(value ? 'play' : 'pause'); $('#pause').setAttribute('aria-label', value ? 'Resume game' : 'Pause game');
 }
 function ended(sim: Simulation) {
   scene.audio.music = false;
+  touchControls.setPlaying(false);
   if (sim.score > best) { best = sim.score; try { localStorage.setItem('bb-best', String(best)); } catch { /* Optional persistence. */ } }
   $('#best').textContent = String(best).padStart(6, '0');
   $('#end-eyebrow').textContent = sim.mode === 'won' ? 'THE FRUIT IS SAFE. FOR NOW.' : sim.score === best && best > 0 ? 'A FRESH PERSONAL BEST' : 'A NOBLE FOOD FIGHT';
@@ -157,6 +208,7 @@ const scene = new JungleScene({ ready: () => { $('#loading').classList.add('hidd
     if (missing && !scene.paused) { pause(true); showBanner('CONTROLLER DISCONNECTED — RECONNECT TO CONTINUE'); }
   }
 } });
+scene.touch = touchControls;
 new Phaser.Game({ type: Phaser.AUTO, parent: 'game', width: WIDTH, height: HEIGHT, backgroundColor: '#294430',
   scene: [scene], render: { antialias: true, roundPixels: true },
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
@@ -165,23 +217,29 @@ new Phaser.Game({ type: Phaser.AUTO, parent: 'game', width: WIDTH, height: HEIGH
 
 $('#start').addEventListener('click', start); $('#retry').addEventListener('click', start); $('#restart-paused').addEventListener('click', start);
 $('#pause').addEventListener('click', () => pause(!scene.paused)); $('#resume').addEventListener('click', () => pause(false));
-$('#back-lobby').addEventListener('click', () => {
+function backToLobby() {
   started = false; scene.prepareLobby(); $('#lobby').classList.remove('hidden'); $('#end-overlay').classList.add('hidden'); $('#in-game-hud').classList.add('hidden'); $('#game-frame').classList.remove('running'); $('#intermission').classList.add('hidden'); $<HTMLButtonElement>('#pause').disabled = true;
+  $('#pause-overlay').classList.add('hidden'); $('.play-setup').classList.remove('hidden'); touchControls.setPlaying(false); touchControls.reset();
   $('#location-name').textContent = $('#world-title').textContent = WORLDS[0].name; $('#world-sub').textContent = WORLDS[0].sub;
   $('#run-time').textContent = '00:00'; $('#chapter').textContent = $('#chapter-number').textContent = '01';
   $('#chapter-progress').innerHTML = Array.from({ length: 6 }, (_, i) => `<i class="${i === 0 ? 'current' : ''}"></i>`).join('');
   $('#game-status').textContent = 'YOUR JUNGLE. YOUR RULES. THEIR PROBLEM.'; $('#continue-count').textContent = '2 SECOND CHANCES';
   updateSquad();
-});
+}
+$('#back-lobby').addEventListener('click', backToLobby); $('#pause-to-lobby').addEventListener('click', backToLobby);
 $('#sound').addEventListener('click', () => { settings.sound = !settings.sound; scene.audio.unlock(); applySettings(); saveSettings(); });
-$('#input-mode').addEventListener('click', () => { scene.controllerOnly = !scene.controllerOnly; selected = [0]; $('#input-mode').innerHTML = `${icon('pad')} ${scene.controllerOnly ? 'CONTROLLERS ONLY' : 'KEYBOARD + CONTROLLERS'} ${icon('arrow')}`; updateSquad(); });
-document.querySelectorAll<HTMLButtonElement>('[data-player]').forEach(card => card.addEventListener('click', () => { const id = Number(card.dataset.player); if (selected.includes(id)) selected = selected.filter(i => i !== id); else selected.push(id); selected.sort(); updateSquad(); }));
+$('#input-mode').addEventListener('click', () => { scene.controllerOnly = !scene.controllerOnly; $<HTMLSelectElement>('#host-control').value = scene.controllerOnly ? 'controllers' : 'mixed'; updateSquad(); });
+$('#solo-mode').addEventListener('click', () => { requestedPlayers = 1; scene.controllerOnly = false; $<HTMLSelectElement>('#host-control').value = 'mixed'; updateSquad(); });
+$('#coop-mode').addEventListener('click', () => { requestedPlayers = Math.max(2, requestedPlayers); updateSquad(); });
+document.querySelectorAll<HTMLButtonElement>('[data-count]').forEach(button => button.addEventListener('click', () => { requestedPlayers = Number(button.dataset.count); updateSquad(); }));
+$('#host-control').addEventListener('change', () => { scene.controllerOnly = $<HTMLSelectElement>('#host-control').value === 'controllers'; updateSquad(); });
+document.querySelectorAll<HTMLButtonElement>('[data-player]').forEach(card => card.addEventListener('click', () => { requestedPlayers = Number(card.dataset.player) + 1; updateSquad(); $('.play-setup').scrollIntoView({ block: 'center', behavior: 'smooth' }); }));
 $('#fullscreen').addEventListener('click', async () => { try { if (document.fullscreenElement) await document.exitFullscreen(); else await $('#game-frame').requestFullscreen(); } catch { showBanner('FULLSCREEN IS NOT AVAILABLE IN THIS BROWSER'); } });
 let dialogPaused = false;
 function openDialog(id: string) { dialogPaused = scene.paused; if (started) pause(true); $<HTMLDialogElement>(id).showModal(); }
 $('#how').addEventListener('click', () => openDialog('#controls-dialog')); $('#controls-more').addEventListener('click', () => openDialog('#controls-dialog')); $('#settings').addEventListener('click', () => openDialog('#settings-dialog'));
 document.querySelectorAll<HTMLDialogElement>('dialog').forEach(dialog => { dialog.querySelectorAll('button').forEach(button => button.addEventListener('click', () => dialog.close())); dialog.addEventListener('close', () => { if (started && !dialogPaused) pause(false); }); dialog.addEventListener('click', event => { if (event.target === dialog) { const r = dialog.getBoundingClientRect(); if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) dialog.close(); } }); });
-document.querySelectorAll<HTMLInputElement>('.settings-list input').forEach(input => input.addEventListener('change', () => { settings[input.name as keyof Settings] = input.checked; applySettings(); saveSettings(); }));
+document.querySelectorAll<HTMLInputElement>('.settings-list input').forEach(input => input.addEventListener('change', () => { settings[input.name as keyof Settings] = input.checked; applySettings(); if (!started) updateSquad(); saveSettings(); }));
 window.addEventListener('keydown', event => { if (event.repeat || document.querySelector('dialog[open]')) return; if (event.code === 'Escape' || event.code === 'KeyP') { event.preventDefault(); pause(!scene.paused); } });
 document.addEventListener('visibilitychange', () => { if (document.hidden && started) pause(true); });
 const descriptions: Record<string, string> = { banana: 'Hold fire for a steady stream of bananas. Unlimited fruit. Questionable accuracy.', nuts: 'Six crunchy projectiles in a wide spread. Get close, crack nuts, clear the pack.', coconut: 'Slow, heavy coconuts explode on impact. Perfect for crowds and particularly large cats.' };

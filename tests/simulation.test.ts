@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Simulation, idleInput, WIDTH, HEIGHT } from '../src/simulation.ts';
+import { MAX_HEALTH, REVIVE_HEALTH, heartFills } from '../src/health.ts';
 
 function fixture(players = 1) {
   const sim = new Simulation(100);
@@ -25,7 +26,7 @@ test('fast fruit hits a jaguar and never damages a teammate', () => {
   p.x = 650; p.y = 380; p.angle = 0; friend.x = 695; friend.y = 380;
   sim.spawnEnemy('chaser'); const enemy = sim.enemies[0]; enemy.x = 740; enemy.y = 380; enemy.age = 2; enemy.hp = 20; enemy.speed = 0;
   sim.shoot(p); run(sim, 12);
-  assert.equal(friend.hp, 5); assert.equal(sim.kills, 1); assert.ok(sim.score > 0);
+  assert.equal(friend.hp, MAX_HEALTH); assert.equal(sim.kills, 1); assert.ok(sim.score > 0);
 });
 test('one bomb action spends exactly one charge and explodes after its arc', () => {
   const sim = fixture(), p = sim.players[0]; p.x = 600; p.y = 380; p.angle = 0;
@@ -41,15 +42,15 @@ test('temporary weapons and tank protection expire', () => {
   sim.drop('nuts', p.x, p.y); sim.update(1 / 60, new Map()); assert.equal(p.weapon, 'nuts');
   run(sim, 1082); assert.equal(p.weapon, 'banana');
   sim.drop('tank', p.x, p.y); sim.update(1 / 60, new Map()); assert.ok(p.vehicleTime > 11);
-  p.invulnerable = 0; sim.damagePlayer(p); assert.equal(p.hp, 5);
-  run(sim, 722); assert.equal(p.vehicleTime, 0); sim.damagePlayer(p); assert.equal(p.hp, 4);
+  p.invulnerable = 0; sim.damagePlayer(p); assert.equal(p.hp, MAX_HEALTH);
+  run(sim, 722); assert.equal(p.vehicleTime, 0); sim.damagePlayer(p); assert.equal(p.hp, MAX_HEALTH - 1);
 });
 test('a nearby teammate can revive a downed monkey, while a team wipe ends the run', () => {
   const sim = fixture(2), p = sim.players[0], friend = sim.players[1];
   p.invulnerable = 0; p.hp = 1; sim.damagePlayer(p); assert.equal(p.alive, false);
   friend.x = p.x + 35; friend.y = p.y;
   const input = idleInput(); input.revive = true; run(sim, 100, new Map([[1, input]]));
-  assert.equal(p.alive, true); assert.equal(p.hp, 3);
+  assert.equal(p.alive, true); assert.equal(p.hp, REVIVE_HEALTH);
   p.invulnerable = friend.invulnerable = 0; p.hp = friend.hp = 1;
   sim.damagePlayer(p); sim.damagePlayer(friend); sim.update(1 / 60, new Map()); assert.equal(sim.mode, 'over');
 });
@@ -66,4 +67,22 @@ test('four players, large crowds and many fruit shots maintain finite bounded st
   run(sim, 600, map);
   for (const entity of [...sim.players, ...sim.enemies, ...sim.projectiles]) assert.ok(Number.isFinite(entity.x) && Number.isFinite(entity.y));
   assert.ok(sim.projectiles.length < 250); assert.equal(sim.players.length, 4);
+});
+
+test('three hearts lose exactly half a heart per jaguar hit, with protection between hits', () => {
+  const sim = fixture(); sim.continues = 0; const p = sim.players[0];
+  assert.deepEqual(heartFills(p.hp), [1, 1, 1]);
+  for (let hit = 1; hit <= 6; hit++) {
+    p.invulnerable = 0; sim.damagePlayer(p);
+    assert.equal(p.hp, 6 - hit);
+    if (hit === 1) assert.deepEqual(heartFills(p.hp), [1, 1, 0.5]);
+    if (hit < 6) { sim.damagePlayer(p); assert.equal(p.hp, 6 - hit); assert.equal(p.alive, true); }
+  }
+  assert.equal(p.alive, false); assert.deepEqual(heartFills(p.hp), [0, 0, 0]);
+});
+
+test('healing fills one heart without exceeding the three-heart maximum', () => {
+  const sim = fixture(), p = sim.players[0]; p.hp = 3;
+  sim.drop('heal', p.x, p.y); sim.update(1 / 60, new Map()); assert.equal(p.hp, 5);
+  sim.drop('heal', p.x, p.y); sim.update(1 / 60, new Map()); assert.equal(p.hp, MAX_HEALTH);
 });

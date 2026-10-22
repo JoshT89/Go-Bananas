@@ -1,8 +1,11 @@
 import Phaser from 'phaser';
 import { Simulation, WIDTH, HEIGHT, PLAYER_COLOURS, PLAYER_NAMES, WORLDS, idleInput, clamp } from './simulation';
-import type { Input, GameEvent } from './simulation';
+import type { Input, GameEvent, Enemy } from './simulation';
 import { makeArt } from './art';
 import { ArcadeAudio } from './audio';
+import { heartFills } from './health';
+import { controllerForPlayer } from './local-lobby';
+import type { TouchControls } from './touch-controls';
 
 export type Hooks = { ready: () => void; hud: (sim: Simulation) => void; banner: (text: string) => void; ended: (sim: Simulation) => void; pads: (pads: number[]) => void };
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; max: number; size: number; colour: number };
@@ -14,6 +17,7 @@ export class JungleScene extends Phaser.Scene {
   reduced = false;
   assist = false;
   controllerOnly = false;
+  touch?: TouchControls;
   private background!: Phaser.GameObjects.Image;
   private under!: Phaser.GameObjects.Graphics;
   private over!: Phaser.GameObjects.Graphics;
@@ -64,14 +68,14 @@ export class JungleScene extends Phaser.Scene {
   start(ids: number[]) {
     this.sim.start(ids); this.finished = false; this.paused = false; this.accumulator = 0;
     this.particles = []; this.rings = []; this.keys.clear(); this.pressed.clear(); this.pointerBomb = false;
-    this.audio.unlock(); this.hooks.hud(this.sim);
+    this.touch?.reset(); this.audio.unlock(); this.hooks.hud(this.sim);
   }
   private inputs() {
     const inputs = new Map<number, Input>();
     const pads = navigator.getGamepads?.() ?? [];
     for (const p of this.sim.players) {
       const input = idleInput();
-      const padIndex = this.controllerOnly ? this.padIds[p.id] : p.id === 0 ? (this.sim.players.length === 1 ? this.padIds[0] : undefined) : this.padIds[p.id - 1];
+      const padIndex = controllerForPlayer(p.id, this.controllerOnly ? 'controllers' : 'mixed', this.padIds);
       const pad = padIndex !== undefined ? pads[padIndex] : null;
       if (pad?.connected) {
         input.mx = Math.abs(pad.axes[0] ?? 0) > 0.18 ? pad.axes[0] : 0;
@@ -87,9 +91,24 @@ export class JungleScene extends Phaser.Scene {
         const my = Number(this.keys.has('KeyS')) - Number(this.keys.has('KeyW'));
         if (mx || my || !pad) { input.mx = mx; input.my = my; }
         const pointer = this.input.activePointer;
-        if (pointer.isDown || !pad) { input.ax = pointer.x - p.x; input.ay = pointer.y - p.y; }
-        input.fire ||= pointer.leftButtonDown() || this.keys.has('KeyJ');
+        const touching = this.touch?.enabled;
+        if ((!pointer.wasTouch && pointer.isDown) || (!touching && !pad)) { input.ax = pointer.x - p.x; input.ay = pointer.y - p.y; }
+        input.fire ||= (!pointer.wasTouch && pointer.leftButtonDown()) || this.keys.has('KeyJ');
         input.dash ||= this.pressed.has('Space'); input.bomb ||= this.pointerBomb || this.pressed.has('KeyQ'); input.revive ||= this.keys.has('KeyE');
+        if (touching && !this.controllerOnly) {
+          const mobile = this.touch!.state.read();
+          if (!mobile.fire && !input.fire) { input.ax = Math.cos(p.angle); input.ay = Math.sin(p.angle); }
+          if (mobile.mx || mobile.my || this.touch!.state.movePointer !== null) { input.mx = mobile.mx; input.my = mobile.my; }
+          if (mobile.fire) {
+            input.fire = true;
+            if (Math.hypot(mobile.ax, mobile.ay) > 0.15) { input.ax = mobile.ax; input.ay = mobile.ay; }
+            else {
+              const nearest = this.sim.enemies.reduce<Enemy | undefined>((nearest, e) => !nearest || Math.hypot(e.x - p.x, e.y - p.y) < Math.hypot(nearest.x - p.x, nearest.y - p.y) ? e : nearest, undefined);
+              input.ax = nearest ? nearest.x - p.x : Math.cos(p.angle); input.ay = nearest ? nearest.y - p.y : Math.sin(p.angle);
+            }
+          }
+          input.bomb ||= mobile.bomb; input.dash ||= mobile.dash; input.revive ||= mobile.revive;
+        }
       }
       if (this.assist && this.sim.enemies.length && (input.fire || !pad)) {
         let enemy = this.sim.enemies[0];
@@ -111,19 +130,22 @@ export class JungleScene extends Phaser.Scene {
       this.hooks.pads(this.padIds);
     }
     if (!this.paused && (this.sim.mode === 'playing' || this.sim.mode === 'break')) {
-      const input = this.inputs(); this.accumulator += dt;
+      this.accumulator += dt;
+      // Read edge-triggered actions only when they can reach a simulation step.
+      const input = this.accumulator >= 1 / 60 ? this.inputs() : new Map<number, Input>();
       let steps = 0;
       while (this.accumulator >= 1 / 60 && steps < 4) {
         this.sim.update(1 / 60, input); this.accumulator -= 1 / 60; steps++;
         for (const i of input.values()) { i.bomb = false; i.dash = false; }
       }
+      if (steps) this.touch?.state.consumeActions();
       for (const event of this.sim.events.splice(0)) this.effect(event);
       if ((this.sim.mode as string) === 'over' || (this.sim.mode as string) === 'won') { if (!this.finished) { this.finished = true; this.hooks.ended(this.sim); } }
     }
     if (time - this.lastHud > 90) { this.hooks.hud(this.sim); this.lastHud = time; }
     if (import.meta.env?.DEV) {
       const host = document.getElementById('game');
-      if (host) { host.dataset.simulation = JSON.stringify({ mode: this.sim.mode, paused: this.paused, time: this.sim.time, delta, fps: this.game.loop.actualFps, rawDelta: this.game.loop.rawDelta, accumulator: this.accumulator, frame: time, players: this.sim.players.map(p => ({ id: p.id, x: p.x, y: p.y })), enemies: this.sim.enemies.length }); }
+      if (host) { host.dataset.simulation = JSON.stringify({ mode: this.sim.mode, paused: this.paused, time: this.sim.time, delta, fps: this.game.loop.actualFps, rawDelta: this.game.loop.rawDelta, accumulator: this.accumulator, frame: time, players: this.sim.players.map(p => ({ id: p.id, x: p.x, y: p.y, hp: p.hp })), enemies: this.sim.enemies.length }); }
     }
     this.renderWorld(dt, time / 1000);
   }
@@ -186,6 +208,9 @@ export class JungleScene extends Phaser.Scene {
       if (p.shield > 0) { over.lineStyle(2, 0xabe7e4, 0.55 + Math.sin(time * 4) * 0.15); over.strokeCircle(p.x, p.y, 35); }
       if (p.dashTime > 0) { g.lineStyle(14, colour, 0.35); g.lineBetween(p.x, p.y, p.x - p.dashX * 58, p.y - p.dashY * 58); }
       this.label(`p${p.id}`, tank ? `TIMBER TANK · ${Math.ceil(p.vehicleTime)}s` : `${PLAYER_NAMES[p.id]} · P${p.id + 1}`, p.x, p.y + (tank ? 54 : 40), PLAYER_COLOURS[p.id], 10);
+      const healthY = p.y - (tank ? 48 : 39);
+      over.fillStyle(0x1b3025, 0.8); over.fillRoundedRect(p.x - 28, healthY - 11, 56, 21, 5);
+      heartFills(p.hp).forEach((fill, index) => this.sprite(`hp${p.id}-${index}`, `health-${fill}`, p.x + (index - 1) * 17, healthY, 17, 17).setDepth(11000));
       if (p.dashCd > 0) { over.lineStyle(2, colour, 0.6); over.beginPath(); over.arc(p.x, p.y + 12, 24, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - p.dashCd / 2.4)); over.strokePath(); }
     }
     for (const b of this.sim.projectiles) {
@@ -213,7 +238,7 @@ export class JungleScene extends Phaser.Scene {
       over.lineStyle(5 * (1 - t), r.colour, 0.8 * (1 - t)); over.strokeCircle(r.x, r.y, r.radius * (0.15 + t * 0.85));
       over.fillStyle(r.colour, (this.reduced ? 0.08 : 0.21) * (1 - t)); over.fillCircle(r.x, r.y, r.radius * t);
     }
-    if (!ready && !this.assist && this.sim.players.some(p => p.id === 0 && p.alive)) {
+    if (!ready && !this.assist && !this.touch?.enabled && this.sim.players.some(p => p.id === 0 && p.alive)) {
       const ptr = this.input.activePointer;
       over.lineStyle(1.5, 0xffefbb, 0.9); over.strokeCircle(ptr.x, ptr.y, 8);
       over.lineBetween(ptr.x - 13, ptr.y, ptr.x - 5, ptr.y); over.lineBetween(ptr.x + 5, ptr.y, ptr.x + 13, ptr.y); over.lineBetween(ptr.x, ptr.y - 13, ptr.x, ptr.y - 5); over.lineBetween(ptr.x, ptr.y + 5, ptr.x, ptr.y + 13);

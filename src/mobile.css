@@ -1,0 +1,95 @@
+/* Player setup is visible before play, separate from the arena. */
+.play-setup{margin-bottom:15px;padding:15px 17px;border:1px solid #d4dac5;border-radius:7px;background:#e9ecdf}
+.mode-picker{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.mode-picker>span{font-size:8px;font-weight:800;letter-spacing:1.2px;color:#768264}
+.mode-picker>div{display:flex;gap:6px}
+.mode-picker button{display:flex;align-items:center;gap:7px;background:#f4f3e9;border:1px solid #d0d7bf;padding:10px 12px;border-radius:4px;font-size:10px;font-weight:800;letter-spacing:.5px}
+.mode-picker button .icon{width:15px;height:15px}
+.mode-picker button b{font-size:7px;font-weight:600;color:#899276}
+.mode-picker button.chosen{background:#2e4933;border-color:#2e4933;color:#f7e9bc}
+.mode-picker button.chosen b{color:#bacb99}
+.play-setup p{margin:10px 0 0;font-size:10px;line-height:1.5;color:#788769}
+.play-setup p.needs-controllers{color:#996537}
+.coop-setup{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:13px;padding-top:12px;border-top:1px solid #d3dac5}
+.player-count-picker{display:flex;gap:5px}
+.player-count-picker button{border:1px solid #c4cfb3;background:#f1f1e5;font-size:9px;font-weight:800;border-radius:3px;padding:9px}
+.player-count-picker button.chosen{border-color:#a87d3f;background:#e6cc91;color:#684c28}
+.host-control-label{font-size:7px;letter-spacing:.7px;color:#758366;font-weight:700}
+.host-control-label select{border:1px solid #c9d1ba;border-radius:3px;background:#f6f4e9;color:#3b5439;padding:6px;margin-left:6px;font:inherit;font-size:9px;letter-spacing:0}
+
+/* Three hearts, with half-heart damage, always stay inside the frame. */
+.run-health{display:flex;align-items:center;justify-content:space-between;gap:8px;background:#1d3327;color:#f0e4bc;border-top:1px solid #79916630;border-bottom:1px solid #79916630;padding:9px 16px;min-height:45px}
+.monkey-health{display:flex;align-items:center;gap:11px;padding-right:8px;border-left:3px solid var(--player);padding-left:9px;min-width:0}
+.monkey-health>b{font-size:9px;color:var(--player);letter-spacing:.5px;white-space:nowrap}
+.monkey-health>b span{margin-left:6px;color:#becaa5;font-size:8px}
+.monkey-health>strong{font-size:14px;font-weight:800;white-space:nowrap;min-width:26px}
+.monkey-health>strong small{font-size:9px;font-weight:500;color:#8fa27f;margin-left:1px}
+.health-icons{display:inline-flex;gap:5px;align-items:center;vertical-align:middle}
+.health-heart{display:inline-block;position:relative;width:23px;height:23px;flex-shrink:0}
+.health-heart>.icon{width:23px;height:23px;fill:#40563e;stroke:#617455;stroke-width:1.5}
+.heart-fill{position:absolute;left:0;top:0;height:23px;overflow:hidden}
+.heart-fill>.icon{display:block;width:23px;height:23px;fill:#f09b86;stroke:#ffcfac;stroke-width:1.3;max-width:none}
+.health-explainer{font-size:8px;font-weight:700;letter-spacing:1px;color:#96aa7f}
+.low-health{color:#ffc4ad}
+.low-health .heart-fill>.icon{fill:#f07965;stroke:#ffd5bd}
+.low-health>strong{color:#ffad95}
+.run-health:has(.monkey-health:nth-child(3)) .monkey-health{gap:5px;padding-left:6px;padding-right:0}
+.run-health:has(.monkey-health:nth-child(3)) .monkey-health>b span{display:none}
+.run-health:has(.monkey-health:nth-child(3)) .health-heart,.run-health:has(.monkey-health:nth-child(3)) .heart-fill{height:17px;width:17px}
+.run-health:has(.monkey-health:nth-child(3)) .health-heart .icon{height:17px;width:17px}
+.player-detail .health-icons{gap:3px}
+.player-detail .health-heart,.player-detail .heart-fill{width:13px;height:13px}
+.player-detail .health-heart .icon{width:13px;height:13px}
+.player-detail .health-heart>.icon{fill:#c6ceb8;stroke:#b3bea1}
+
+/* Multi-pointer thumb sticks and large action buttons. */
+.touch-controls{display:grid;grid-template-columns:100px minmax(0,1fr) 100px;align-items:center;gap:8px 15px;padding:15px 20px 9px;background:linear-gradient(#233e2c,#1b3125);border-top:1px solid #6d87533d;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:none;color:#e9dcab}
+.stick-group{display:flex;flex-direction:column;align-items:center;gap:7px}
+.stick-group>span{font-size:8px;font-weight:800;letter-spacing:1.5px;color:#a8b88e}
+.touch-stick{width:96px;height:96px;border:2px solid #a6b78477;border-radius:50%;position:relative;display:grid;place-items:center;padding:0;background:radial-gradient(circle,#77935b28,#172e23b0);box-shadow:inset 0 0 0 8px #7b93551c,0 3px 0 #11291e;touch-action:none}
+.touch-stick.held{border-color:#e4d38b;background:#7894572b}
+.stick-cross{position:absolute;inset:12px;border:1px dashed #94ad6e3b;border-radius:50%;pointer-events:none}
+.stick-cross:after,.stick-cross:before{content:'';position:absolute;background:#a8b88230}
+.stick-cross:after{top:50%;left:0;right:0;height:1px}
+.stick-cross:before{left:50%;top:0;bottom:0;width:1px}
+.stick-nub{height:44px;width:44px;border-radius:50%;border:2px solid #b8c68a;background:#526c41;display:grid;place-items:center;pointer-events:none;box-shadow:0 4px 0 #132d2066,inset 0 1px 0 #e0e6ac60}
+.stick-nub .icon{width:22px;height:22px;pointer-events:none}
+.move-stick .stick-nub .icon{transform:rotate(-45deg)}
+.aim-stick{border-color:#d8aa6377;background:radial-gradient(circle,#bd9e5e24,#172e23b0)}
+.aim-stick .stick-nub{border-color:#e3bb76;background:#96713d}
+.aim-stick.held .stick-nub{background:#bc8748}
+.touch-actions{display:flex;gap:6px;justify-content:center;align-items:center}
+.touch-actions button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;border:1px solid #a2b47766;border-radius:9px;width:56px;height:57px;background:#40593a;color:#eedcb0;box-shadow:0 3px 0 #13291d;touch-action:none;padding:5px 3px}
+.touch-actions button:active{transform:translateY(2px);background:#5c7546;box-shadow:none}
+.touch-actions button:first-child{border-color:#b9aa6f88;background:#5f613a}
+.touch-actions button .icon{width:20px;height:20px}
+.touch-actions button span{font-size:7px;font-weight:800;letter-spacing:.4px;white-space:nowrap}
+.touch-actions button b{color:#fff1c7}
+.touch-controls>p{grid-column:1/-1;text-align:center;font-size:8px;color:#91a77b;margin:2px 0 0;letter-spacing:.5px}
+.touch-controls.inactive{opacity:.5}
+.touch-enabled .canvas-wrap{aspect-ratio:5/3}
+.touch-enabled #game{touch-action:none}
+.touch-mode .controls-strip>span{display:none}
+.touch-mode .controls-strip{justify-content:flex-end}
+.touch-mode .game-frame.running{scroll-margin-top:8px}
+.touch-mode .game-bottom-bar{font-size:7px}
+.touch-mode .running #game{cursor:default}
+.touch-mode .touch-controls{padding-bottom:max(10px,env(safe-area-inset-bottom))}
+
+@media(pointer:coarse){.touch-mode .game-frame.running{overscroll-behavior:contain}}
+
+@media(max-width:620px){
+ .play-setup{padding:12px;margin-bottom:12px}.mode-picker{flex-direction:column;gap:9px;align-items:flex-start}.mode-picker>div{width:100%}.mode-picker button{flex:1;justify-content:center;padding:10px 8px;gap:5px;font-size:9px}.mode-picker button b{font-size:6px}.play-setup p{font-size:9px}.coop-setup{flex-direction:column;align-items:flex-start;gap:10px}.player-count-picker{width:100%}.player-count-picker button{flex:1}.host-control-label select{font-size:11px}
+ .run-health{padding:8px 10px;min-height:43px;gap:4px}.monkey-health{gap:7px;padding-left:7px}.monkey-health>b{font-size:8px}.monkey-health>b span{font-size:7px}.health-explainer{font-size:6px;letter-spacing:.5px}
+ .run-health:has(.monkey-health:nth-child(3)) .health-icons{gap:1px}.run-health:has(.monkey-health:nth-child(3)) .monkey-health{gap:3px;border-left-width:2px;padding-left:4px}.run-health:has(.monkey-health:nth-child(3)) .monkey-health>strong{display:none}.run-health:has(.monkey-health:nth-child(3)) .health-heart,.run-health:has(.monkey-health:nth-child(3)) .heart-fill{width:14px;height:14px}.run-health:has(.monkey-health:nth-child(3)) .health-heart .icon{width:14px;height:14px}
+ .touch-controls{grid-template-columns:82px minmax(0,1fr) 82px;padding:12px 10px 9px;gap:8px}.touch-stick{width:82px;height:82px}.stick-nub{width:39px;height:39px}.touch-actions{gap:5px}.touch-actions button{width:39px;height:49px}.touch-actions button .icon{width:17px;height:17px}.touch-actions button span{font-size:6px}.touch-controls>p{font-size:7px;letter-spacing:0}
+ .touch-mode .lobby-copy{padding:5% 0 0 6%;width:72%}.touch-mode .lobby h2{font-size:clamp(38px,10vw,58px);margin:9px 0 13px}.touch-mode .lobby-copy>p,.touch-mode .start-note{display:none}.touch-mode .lobby .start-button{min-width:190px;padding:10px 12px;font-size:12px}.touch-mode .lobby .ribbon{font-size:5px}.touch-mode .lobby-bottom{height:25px;padding:0 9px}.touch-mode .lobby-bottom>span{font-size:4px}.touch-mode .lobby-bottom button{font-size:5px}.touch-mode .lobby-art{height:88%;top:-8%;right:-3%;width:48%}.touch-mode .mascot-tag{display:none}
+ .touch-mode .in-game-hud{top:7px;left:8px;right:8px}.touch-mode .wave-pill{padding:5px 6px}.touch-mode .wave-pill small{font-size:4px}.touch-mode .wave-pill>strong{font-size:19px}.touch-mode .wave-pill b{font-size:16px}.touch-mode .score-pill strong{font-size:18px}.touch-mode .score-pill{padding:6px 7px}.touch-mode .wave-banner{font-size:19px;top:36%}.touch-mode .intermission{min-width:190px;bottom:8px;font-size:5px;padding:5px 9px}.touch-mode .intermission b{font-size:14px}.touch-mode .game-bottom-bar{font-size:5px}
+ .touch-mode .game-overlay .overlay-panel{width:90%}.touch-mode .overlay-panel .eyebrow{font-size:6px}.touch-mode .overlay-panel h2{font-size:27px;margin-top:8px}.touch-mode .overlay-panel p{font-size:9px;margin:7px 0}.touch-mode .overlay-panel .start-button{min-width:190px;padding:9px 12px;font-size:12px;margin-top:10px}.touch-mode .subtle-button{padding:10px 5px;font-size:6px}.touch-mode .end-panel .end-stats{margin:8px 0;padding:7px 0}.touch-mode .end-stats b{font-size:20px}
+}
+@media(orientation:landscape) and (max-height:600px){
+ .touch-mode .game-frame.running{position:fixed;inset:0;z-index:200;border:0;border-radius:0;display:flex;flex-direction:column;height:100dvh;width:100vw}
+ .touch-mode .running .game-topbar{height:29px;min-height:29px;padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right))}.touch-mode .running .run-health{min-height:32px;height:32px;padding:4px 16px}.touch-mode .running .health-heart,.touch-mode .running .heart-fill{width:20px;height:20px}.touch-mode .running .health-heart .icon{width:20px;height:20px}.touch-mode .running .canvas-wrap{flex:1;min-height:0;aspect-ratio:auto}.touch-mode .running .game-bottom-bar{min-height:24px;height:24px}
+ .touch-mode .running .touch-controls{position:absolute;z-index:11;background:none;border:0;pointer-events:none;bottom:23px;left:max(4px,env(safe-area-inset-left));right:max(4px,env(safe-area-inset-right));grid-template-columns:100px 1fr 100px;padding:10px}.touch-mode .running .touch-controls button{pointer-events:auto}.touch-mode .running .touch-controls>p{display:none}.touch-mode .running .touch-actions{align-self:end;margin-bottom:3px}.touch-mode .running .touch-actions button{width:47px;height:40px;flex-direction:row;gap:3px;background:#314d35db}.touch-mode .running .touch-actions .icon{width:15px;height:15px}.touch-mode .running .touch-actions span{font-size:6px}.touch-mode .running .touch-stick{width:88px;height:88px;background:#203c29c9}.touch-mode .running .touch-controls.inactive{pointer-events:none;opacity:.3;z-index:5}
+ .touch-mode .running .game-overlay .overlay-panel h2{font-size:31px;margin-top:7px}.touch-mode .running .overlay-panel p{font-size:10px;margin:7px 0}.touch-mode .running .overlay-panel .start-button{padding:10px 15px;min-width:225px;margin-top:12px}.touch-mode .running .subtle-button{padding:10px;font-size:7px}
+}

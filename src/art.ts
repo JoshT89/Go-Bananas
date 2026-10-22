@@ -34,6 +34,13 @@ function palm(c: C, x: number, y: number, scale: number, phase: number) {
 }
 
 export function makeArt(scene: Phaser.Scene) {
+  for (const fill of [0, 0.5, 1]) texture(scene, `health-${fill}`, 28, 28, c => {
+    const shape = new Path2D('M14 25 C-4 13 1 1 10 4 Q13 5 14 8 Q17 1 23 4 C34 10 22 22 14 25Z');
+    c.fillStyle = '#52634f'; c.fill(shape);
+    c.save(); c.beginPath(); c.rect(0, 0, 28 * fill, 28); c.clip(); c.fillStyle = '#f39b86'; c.fill(shape); c.restore();
+    c.strokeStyle = '#263b2c'; c.lineWidth = 2; c.stroke(shape);
+    if (fill > 0) { c.strokeStyle = '#ffdbc0'; c.lineWidth = 2; c.beginPath(); c.moveTo(7, 7); c.lineTo(9, 7); c.stroke(); }
+  });
   for (let id = 0; id < 4; id++) texture(scene, `monkey${id}`, 88, 88, c => {
     // Draw facing right. The scene rotates the complete overhead silhouette.
     oval(c, 40, 49, 24, 19, '#0c1c164d');
