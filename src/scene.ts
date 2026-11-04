@@ -1,11 +1,12 @@
 import Phaser from 'phaser';
 import { Simulation, WIDTH, HEIGHT, PLAYER_COLOURS, PLAYER_NAMES, WORLDS, idleInput, clamp } from './simulation';
-import type { Input, GameEvent, Enemy } from './simulation';
+import type { Input, GameEvent } from './simulation';
 import { makeArt } from './art';
 import { ArcadeAudio } from './audio';
 import { heartFills } from './health';
 import { controllerForPlayer } from './local-lobby';
 import type { TouchControls } from './touch-controls';
+import { touchAim } from './touch-aim';
 
 export type Hooks = { ready: () => void; hud: (sim: Simulation) => void; banner: (text: string) => void; ended: (sim: Simulation) => void; pads: (pads: number[]) => void };
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; max: number; size: number; colour: number };
@@ -75,6 +76,7 @@ export class JungleScene extends Phaser.Scene {
     const pads = navigator.getGamepads?.() ?? [];
     for (const p of this.sim.players) {
       const input = idleInput();
+      const usingTouch = p.id === 0 && !!this.touch?.enabled && !this.controllerOnly;
       const padIndex = controllerForPlayer(p.id, this.controllerOnly ? 'controllers' : 'mixed', this.padIds);
       const pad = padIndex !== undefined ? pads[padIndex] : null;
       if (pad?.connected) {
@@ -95,24 +97,21 @@ export class JungleScene extends Phaser.Scene {
         if ((!pointer.wasTouch && pointer.isDown) || (!touching && !pad)) { input.ax = pointer.x - p.x; input.ay = pointer.y - p.y; }
         input.fire ||= (!pointer.wasTouch && pointer.leftButtonDown()) || this.keys.has('KeyJ');
         input.dash ||= this.pressed.has('Space'); input.bomb ||= this.pointerBomb || this.pressed.has('KeyQ'); input.revive ||= this.keys.has('KeyE');
-        if (touching && !this.controllerOnly) {
+        if (usingTouch) {
           const mobile = this.touch!.state.read();
           if (!mobile.fire && !input.fire) { input.ax = Math.cos(p.angle); input.ay = Math.sin(p.angle); }
           if (mobile.mx || mobile.my || this.touch!.state.movePointer !== null) { input.mx = mobile.mx; input.my = mobile.my; }
           if (mobile.fire) {
             const manualFire = input.fire;
             input.fire = true;
-            if (Math.hypot(mobile.ax, mobile.ay) > 0.15) { input.ax = mobile.ax; input.ay = mobile.ay; }
-            else if (!manualFire) {
-              const nearest = this.sim.enemies.reduce<Enemy | undefined>((nearest, e) => !nearest || Math.hypot(e.x - p.x, e.y - p.y) < Math.hypot(nearest.x - p.x, nearest.y - p.y) ? e : nearest, undefined);
-              input.ax = nearest ? nearest.x - p.x : Math.cos(p.angle); input.ay = nearest ? nearest.y - p.y : Math.sin(p.angle);
+            if (Math.hypot(mobile.ax, mobile.ay) > 0.15 || !manualFire) {
+              Object.assign(input, touchAim(p, mobile, this.sim.enemies, this.touch!.state.autoTarget));
             }
           }
           input.bomb ||= mobile.bomb; input.dash ||= mobile.dash; input.revive ||= mobile.revive;
         }
       }
-      const manualTouchAim = p.id === 0 && this.touch?.enabled && Math.hypot(this.touch.state.aim.x, this.touch.state.aim.y) > 0.15;
-      if (this.assist && !manualTouchAim && this.sim.enemies.length && (input.fire || !pad)) {
+      if (this.assist && !usingTouch && this.sim.enemies.length && (input.fire || !pad)) {
         let enemy = this.sim.enemies[0];
         for (const e of this.sim.enemies) if (Math.hypot(e.x - p.x, e.y - p.y) < Math.hypot(enemy.x - p.x, enemy.y - p.y)) enemy = e;
         input.ax = enemy.x - p.x; input.ay = enemy.y - p.y;
@@ -209,6 +208,12 @@ export class JungleScene extends Phaser.Scene {
       if (p.invulnerable > 0 && !this.reduced) sprite.setAlpha(0.65 + Math.sin(time * 24) * 0.35);
       if (p.shield > 0) { over.lineStyle(2, 0xabe7e4, 0.55 + Math.sin(time * 4) * 0.15); over.strokeCircle(p.x, p.y, 35); }
       if (p.dashTime > 0) { g.lineStyle(14, colour, 0.35); g.lineBetween(p.x, p.y, p.x - p.dashX * 58, p.y - p.dashY * 58); }
+      if (p.id === 0 && !ready && !this.paused && !this.controllerOnly && this.touch?.enabled && this.touch.state.read().fire) {
+        const dx = Math.cos(p.angle), dy = Math.sin(p.angle);
+        const x = p.x + dx * 145, y = p.y + dy * 145;
+        over.lineStyle(3, 0x182f23, 0.8); over.lineBetween(p.x + dx * 42, p.y + dy * 42, x, y); over.strokeCircle(x, y, 11);
+        over.lineStyle(1.5, 0xffe0a0, 0.85); over.lineBetween(p.x + dx * 42, p.y + dy * 42, x, y); over.strokeCircle(x, y, 10);
+      }
       this.label(`p${p.id}`, tank ? `TIMBER TANK · ${Math.ceil(p.vehicleTime)}s` : `${PLAYER_NAMES[p.id]} · P${p.id + 1}`, p.x, p.y + (tank ? 54 : 40), PLAYER_COLOURS[p.id], 10);
       const healthY = p.y - (tank ? 48 : 39);
       over.fillStyle(0x1b3025, 0.8); over.fillRoundedRect(p.x - 28, healthY - 11, 56, 21, 5);

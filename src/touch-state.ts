@@ -11,6 +11,7 @@ export function stickVector(dx: number, dy: number, radius: number) {
 // Pointer identities are independent: aiming never steals the movement thumb.
 export class TouchState {
   private active = false;
+  autoTarget = false;
   move = { x: 0, y: 0 };
   aim = { x: 0, y: 0 };
   movePointer: number | null = null;
@@ -36,7 +37,8 @@ export class TouchState {
   queue(action: 'bomb' | 'dash') { this[action] = true; }
   read(): Input {
     return { ...idleInput(), mx: this.move.x, my: this.move.y, ax: this.aim.x, ay: this.aim.y,
-      fire: this.active, bomb: this.bomb, dash: this.dash, revive: this.revive };
+      fire: this.active && (this.autoTarget || (this.aimHeld && Math.hypot(this.aim.x, this.aim.y) > 0.15)),
+      bomb: this.bomb, dash: this.dash, revive: this.revive };
   }
   consumeActions() { this.bomb = false; this.dash = false; }
   reset() { this.move = { x: 0, y: 0 }; this.aim = { x: 0, y: 0 }; this.movePointer = this.aimPointer = null; this.aimHeld = false; this.revive = false; this.consumeActions(); }

@@ -32,8 +32,8 @@ const paths: Record<string, string> = {
 const icon = (name: string, cls = '') => `<svg class="icon ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] ?? paths.leaf}</svg>`;
 const $ = <T extends HTMLElement = HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
 let selected = [0], connected: number[] = [], requestedPlayers = 1, started = false, bannerTimer: ReturnType<typeof setTimeout>;
-type Settings = { sound: boolean; music: boolean; shake: boolean; reduced: boolean; assist: boolean; touch: boolean };
-const settings: Settings = { sound: true, music: true, shake: true, reduced: false, assist: false, touch: matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0 };
+type Settings = { sound: boolean; music: boolean; shake: boolean; reduced: boolean; assist: boolean; touch: boolean; autoTarget: boolean };
+const settings: Settings = { sound: true, music: true, shake: true, reduced: false, assist: false, autoTarget: false, touch: matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0 };
 let best = 0;
 try { best = Number(localStorage.getItem('bb-best') ?? 0); Object.assign(settings, JSON.parse(localStorage.getItem('bb-settings') ?? '{}')); } catch { /* Storage can be unavailable in private browsing. */ }
 const saveSettings = () => { try { localStorage.setItem('bb-settings', JSON.stringify(settings)); } catch { /* Optional persistence. */ } };
@@ -90,19 +90,21 @@ $('#game-frame').insertAdjacentHTML('beforebegin', `
     <div class="mode-picker"><span>HOW MANY MONKEYS?</span><div role="group" aria-label="Game mode"><button id="solo-mode" class="chosen" aria-pressed="true">${icon('banana')} SOLO <b>1 PLAYER</b></button><button id="coop-mode" aria-pressed="false">${icon('pad')} LOCAL CO-OP <b>2–4 PLAYERS</b></button></div></div>
     <div id="coop-setup" class="coop-setup hidden"><div class="player-count-picker" role="group" aria-label="Number of local players">${[2, 3, 4].map(count => `<button data-count="${count}" aria-pressed="false">${count} PLAYERS</button>`).join('')}</div><label class="host-control-label">PLAYER 1 USES <select id="host-control"><option value="mixed">Keyboard / touch</option><option value="controllers">A controller</option></select></label></div>
     <p id="join-help" role="status">One monkey. All the fruit. Ready when you are.</p>
+    <label class="touch-choice hidden" id="touch-choice">PHONE CONTROLS <select id="touch-style"><option value="aim">Aim &amp; fire · You aim</option><option value="auto">Auto · Just move</option></select><small>Try aiming yourself, or choose Auto for a simpler start.</small></label>
   </section>`);
 $('.game-topbar').insertAdjacentHTML('afterend', '<div class="run-health" id="run-health" aria-label="Squad health"></div>');
 $('#canvas-wrap').insertAdjacentHTML('afterend', `
   <div class="touch-controls hidden inactive" id="touch-controls" aria-label="Touch game controls">
     <div class="touch-left"><div class="stick-group"><button class="touch-stick move-stick" data-stick="move" aria-label="Move monkey: drag the left stick" disabled><span class="stick-cross"></span><span class="stick-nub">${icon('arrow')}</span></button><span>MOVE</span></div>
     <div class="touch-actions"><button data-action="bomb" aria-label="Throw melon bomb" disabled>${icon('bomb')}<span>BOMB <b id="touch-bombs">3</b></span></button><button data-action="dash" aria-label="Dash" disabled>${icon('bolt')}<span id="touch-dash">DASH</span></button><button data-action="revive" aria-label="Hold to revive a nearby monkey" disabled>${icon('heart')}<span>REVIVE</span></button></div>
-    </div><div class="stick-group aim-group"><button class="touch-stick aim-stick" data-stick="aim" aria-label="Aim monkey: drag the right stick, firing is automatic" disabled><span class="stick-cross"></span><span class="stick-nub">${icon('target')}</span></button><span>AIM · AUTO-FIRE</span></div>
-    <p>Auto-fire is on · Left thumb moves · Right thumb aims</p>
+    </div><div class="stick-group aim-group"><button class="touch-stick aim-stick" data-stick="aim" aria-label="Aim and fire: push the right stick to shoot, release to stop" disabled><span class="stick-cross"></span><span class="stick-nub">${icon('target')}</span></button><span id="touch-mode-label">AIM &amp; FIRE</span></div>
+    <p id="touch-help">Left thumb moves · Push right stick to shoot · Release to stop</p>
   </div>`);
 $('#pause-overlay .overlay-panel').insertAdjacentHTML('beforeend', '<button class="subtle-button" id="pause-to-lobby">CHANGE PLAYERS / BASE CAMP</button>');
-$('.settings-list').insertAdjacentHTML('beforeend', `<label><span><b>TOUCH CONTROLS</b><small>Automatic fire. Left thumb moves, right thumb aims.</small></span><input type="checkbox" name="touch" ${settings.touch ? 'checked' : ''}><span class="toggle"></span></label>`);
+$('.settings-list').insertAdjacentHTML('beforeend', `<label><span><b>TOUCH CONTROLS</b><small>Left thumb moves. Push the right stick to aim and shoot.</small></span><input type="checkbox" name="touch" ${settings.touch ? 'checked' : ''}><span class="toggle"></span></label><label><span><b>AUTO MODE · PHONE / TABLET</b><small>A simpler start: shoot and target automatically. You move, dash and throw bombs.</small></span><input type="checkbox" name="autoTarget" ${settings.autoTarget ? 'checked' : ''}><span class="toggle"></span></label>`);
+$('.settings-list [name="assist"]').closest('label')!.querySelector('small')!.textContent = 'Keyboard / controller: target the nearest jaguar. Touch aiming always has a gentle nudge.';
 $('#controls-dialog .control-table').insertAdjacentHTML('afterbegin', '<div><b>PHONE / TABLET</b><span>Left stick moves · Right stick shoots</span></div>');
-$('#controls-dialog .dialog-tip').insertAdjacentHTML('beforebegin', '<p class="dialog-tip">You have 3 hearts: 6 jaguar hits and you’re down. Each hit takes half a heart, with a short grace period to escape. There are no automatic extra lives or wave heals; health pickups restore one heart. On mobile, shooting is automatic. Drag the left stick to move and the right stick to aim; release aim to target the nearest jaguar. BOMB, DASH and REVIVE sit beside movement, so your aiming thumb can stay in place.</p>');
+$('#controls-dialog .dialog-tip').insertAdjacentHTML('beforebegin', '<p class="dialog-tip">On phones, the left stick moves. Push the right stick to aim and keep shooting; release it to stop. Follow the golden aim guide. A gentle nudge helps when you aim close to a jaguar. For a simpler start, choose Auto in Phone controls or Settings: just move while the game targets and shoots for you. You can still aim with the right stick. BOMB, DASH and REVIVE sit beside movement.</p><p class="dialog-tip">You have 3 hearts: 6 jaguar hits and you’re down. Each hit takes half a heart, with a short grace period to escape. There are no automatic extra lives or wave heals; health pickups restore one heart.</p>');
 $('#controls-dialog .dialog-tip:last-of-type').textContent = 'Choose Solo for one monkey, or Local co-op and 2, 3, or 4 players before starting. Friends on the same screen need a controller each; press any button so the browser detects them. Choose “A controller” for Player 1 if everyone is using controllers. You can change players from the pause menu. Online friend invites are not included yet.';
 const touchControls = new TouchControls($('#touch-controls'));
 let healthKey = '';
@@ -142,7 +144,13 @@ function updateSquad() {
 function applySettings() {
   scene.audio.setEnabled(settings.sound); scene.audio.music = settings.music && !scene.paused;
   scene.shake = settings.shake && !settings.reduced; scene.reduced = settings.reduced; scene.assist = settings.assist;
-  touchControls.setEnabled(settings.touch); document.documentElement.classList.toggle('touch-mode', settings.touch);
+  touchControls.setAutoTarget(settings.autoTarget);
+  touchControls.setEnabled(settings.touch && !scene.controllerOnly); document.documentElement.classList.toggle('touch-mode', settings.touch && !scene.controllerOnly);
+  $('#touch-choice').classList.toggle('hidden', !settings.touch || scene.controllerOnly);
+  $<HTMLSelectElement>('#touch-style').value = settings.autoTarget ? 'auto' : 'aim';
+  $('#touch-mode-label').textContent = settings.autoTarget ? 'AUTO · AIM TO OVERRIDE' : 'AIM & FIRE';
+  $('#touch-help').textContent = settings.autoTarget ? 'Auto targets & shoots · Left thumb moves · Right thumb can aim' : 'Left thumb moves · Push right stick to shoot · Release to stop';
+  $('[data-stick="aim"]').setAttribute('aria-label', settings.autoTarget ? 'Aim override: drag the right stick; release for automatic targeting and fire' : 'Aim and fire: push the right stick to shoot, release to stop');
   $('#sound').innerHTML = icon(settings.sound ? 'sound' : 'muted'); $('#sound').setAttribute('aria-label', settings.sound ? 'Mute audio' : 'Unmute audio');
   for (const key of Object.keys(settings) as (keyof Settings)[]) $<HTMLInputElement>(`[name="${key}"]`).checked = settings[key];
 }
@@ -175,7 +183,7 @@ function hud(sim: Simulation) {
   if (healthTip) healthTip.textContent = p.vehicleTime > 0 ? 'TANK · PROTECTED' : p.shield > 0 ? `SHIELD · ${p.shield} HITS BLOCKED` : '1 JAGUAR HIT = ½ HEART';
   $('#touch-bombs').textContent = String(p.bombs); $('#touch-dash').textContent = p.dashCd > 0 ? `${p.dashCd.toFixed(1)}s` : 'DASH';
   $('#health-rule').textContent = p.vehicleTime > 0 ? 'TANK PROTECTION' : p.shield > 0 ? `SHIELD · ${p.shield} BLOCKS` : p.alive ? `${p.hp} HIT${p.hp === 1 ? '' : 'S'} LEFT` : 'MONKEY DOWN';
-  $('#game-status').innerHTML = `${settings.touch && !scene.controllerOnly ? 'AUTO-FIRE · ' : ''}${p.vehicleTime > 0 ? `TIMBER TANK · ${Math.ceil(p.vehicleTime)}s` : WEAPONS[p.weapon].name} <span class="status-divider">/</span> ${p.bombs} MELON BOMBS <span class="status-divider">/</span> DASH ${p.dashCd > 0 ? `${p.dashCd.toFixed(1)}s` : 'READY'}`;
+  $('#game-status').innerHTML = `${settings.touch && !scene.controllerOnly ? settings.autoTarget ? 'AUTO · ' : 'AIM & FIRE · ' : ''}${p.vehicleTime > 0 ? `TIMBER TANK · ${Math.ceil(p.vehicleTime)}s` : WEAPONS[p.weapon].name} <span class="status-divider">/</span> ${p.bombs} MELON BOMBS <span class="status-divider">/</span> DASH ${p.dashCd > 0 ? `${p.dashCd.toFixed(1)}s` : 'READY'}`;
 }
 function start() {
   if (!localSquad(requestedPlayers, connected.length, scene.controllerOnly ? 'controllers' : 'mixed').canStart) return;
@@ -230,11 +238,12 @@ function backToLobby() {
 }
 $('#back-lobby').addEventListener('click', backToLobby); $('#pause-to-lobby').addEventListener('click', backToLobby);
 $('#sound').addEventListener('click', () => { settings.sound = !settings.sound; scene.audio.unlock(); applySettings(); saveSettings(); });
-$('#input-mode').addEventListener('click', () => { scene.controllerOnly = !scene.controllerOnly; $<HTMLSelectElement>('#host-control').value = scene.controllerOnly ? 'controllers' : 'mixed'; updateSquad(); });
-$('#solo-mode').addEventListener('click', () => { requestedPlayers = 1; scene.controllerOnly = false; $<HTMLSelectElement>('#host-control').value = 'mixed'; updateSquad(); });
+$('#input-mode').addEventListener('click', () => { scene.controllerOnly = !scene.controllerOnly; $<HTMLSelectElement>('#host-control').value = scene.controllerOnly ? 'controllers' : 'mixed'; applySettings(); updateSquad(); });
+$('#solo-mode').addEventListener('click', () => { requestedPlayers = 1; scene.controllerOnly = false; $<HTMLSelectElement>('#host-control').value = 'mixed'; applySettings(); updateSquad(); });
+$('#touch-style').addEventListener('change', () => { settings.autoTarget = $<HTMLSelectElement>('#touch-style').value === 'auto'; applySettings(); saveSettings(); });
 $('#coop-mode').addEventListener('click', () => { requestedPlayers = Math.max(2, requestedPlayers); updateSquad(); });
 document.querySelectorAll<HTMLButtonElement>('[data-count]').forEach(button => button.addEventListener('click', () => { requestedPlayers = Number(button.dataset.count); updateSquad(); }));
-$('#host-control').addEventListener('change', () => { scene.controllerOnly = $<HTMLSelectElement>('#host-control').value === 'controllers'; updateSquad(); });
+$('#host-control').addEventListener('change', () => { scene.controllerOnly = $<HTMLSelectElement>('#host-control').value === 'controllers'; applySettings(); updateSquad(); });
 document.querySelectorAll<HTMLButtonElement>('[data-player]').forEach(card => card.addEventListener('click', () => { requestedPlayers = Number(card.dataset.player) + 1; updateSquad(); $('.play-setup').scrollIntoView({ block: 'center', behavior: 'smooth' }); }));
 $('#fullscreen').addEventListener('click', async () => { try { if (document.fullscreenElement) await document.exitFullscreen(); else await $('#game-frame').requestFullscreen(); } catch { showBanner('FULLSCREEN IS NOT AVAILABLE IN THIS BROWSER'); } });
 let dialogPaused = false;

@@ -34,9 +34,11 @@ Choose **Solo** to start with one monkey. Choose **Local co-op**, then **2, 3, o
 Touch controls turn on automatically on touch devices and can also be enabled in Settings.
 
 - Drag the **left stick** to move.
-- **Shooting is automatic** during mobile play, even without touching either stick. Release the right stick to target the nearest jaguar, or drag it to aim manually.
+- **Aim & fire is the default:** push the **right stick** to aim and keep shooting in that direction. Release it (or return to the centre) to stop. A golden aim guide shows where your shots go.
+- Gentle aim assistance nudges up to six degrees toward visible enemies within an 18-degree cone and 640 arena units. It never turns you toward enemies behind you; tracking and leading still matter.
+- Choose **Auto · Just move** in **Phone controls** before a run, or enable **Auto mode** in Settings, for automatic shooting and nearest-enemy targeting. You can still override the aim with the right stick. The choice is saved on this device. Older saved settings default to Aim & fire.
 - **Bomb**, **Dash**, and **Revive** sit beside the left movement stick. Tap them with your movement thumb while keeping the right thumb on aim; bombs follow that aim.
-- Portrait keeps the controls below the arena. Landscape uses the screen for the game and puts the sticks at the sides. Rotation and cancelled touches clear held sticks; pause, game over, and losing focus stop automatic fire.
+- Portrait keeps the controls below the arena. Landscape uses the screen for the game and puts the sticks at the sides. Rotation and cancelled touches clear held sticks; pause, game over, and losing focus stop shooting in both modes.
 
 Each monkey starts with **three hearts**: **six unprotected jaguar hits** knock them out. Every hit immediately removes half a heart, shows a damage label, and grants 0.6 seconds to escape without taking damage on every frame of the same contact. There are no automatic extra lives or wave heals. Health pickups restore one heart, up to three. Shields and the Timber Tank visibly protect against hits. Hearts stay visible above the arena and each monkey, plus in squad cards; the footer shows hits remaining or active protection. A solo knockout ends the run. In co-op, a nearby teammate can revive a monkey within 14 seconds.
 
@@ -58,7 +60,7 @@ The lab and space chapters currently reuse the core combat rules with different 
 - `src/scene.ts`: Phaser rendering, fixed simulation steps, input adapters and visual effects.
 - `src/art.ts`: original canvas textures and character portraits.
 - `src/audio.ts`: Web Audio sound effects and music.
-- `src/touch-controls.ts` and `src/touch-state.ts`: independent movement/aiming pointers, thumb-stick deadzones, action buttons and cancellation.
+- `src/touch-controls.ts`, `src/touch-state.ts`, and `src/touch-aim.ts`: independent movement/aiming pointers, deliberate firing, gentle assistance, optional Auto mode, action buttons and cancellation.
 - `src/health.ts`: three-heart display and half-heart health units.
 - `src/local-lobby.ts`: controller requirements and player/controller assignment.
 - `src/main.ts`: lobby, HUD, settings, score storage and menus.
@@ -68,4 +70,6 @@ Private publication uses the Sites manifest in `.openai/hosting.json`. The game 
 
 ## Verification
 
-Automated checks cover combat, actual six-hit jaguar contact, health pickups, revives, wave progression without passive healing, four-player crowds, player counts, controller assignment, automatic fire without an aiming touch, independent touch pointers, pause cancellation, and bombs while aiming. Browser checks cover portrait/landscape phone sizes, starting, stick movement and firing, touch bombs and dash, health visibility, pause, changing players, settings, and restart. Physical phones and controller mappings still benefit from device testing. Online multiplayer is not included in this build.
+Automated checks cover combat, actual six-hit jaguar contact, health pickups, revives, wave progression without passive healing, four-player crowds, player counts, controller assignment, independent touch pointers, aim-to-fire and release-to-stop, deadzones, gentle assistance boundaries and obstacles, optional automatic targeting, pause cancellation in both modes, and bombs while aiming.
+
+Browser verification covers 390×844 portrait and 844×390 landscape layouts, held directional fire with the legacy aim-assist setting enabled, automatic fire without aiming in Auto mode, saved mode selection after reload, bombs, dash, pause and returning to the lobby. No browser console errors were observed. Physical phones, simultaneous real touch gestures and controller mappings still need device testing. Online multiplayer is not included in this build.

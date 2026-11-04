@@ -53,6 +53,10 @@ export class TouchControls {
     window.addEventListener('orientationchange', () => this.reset());
   }
   setEnabled(value: boolean) { this.enabled = value; this.root.classList.toggle('hidden', !value); document.getElementById('game-frame')!.classList.toggle('touch-enabled', value); this.state.setActive(value && this.playing); if (!value) this.reset(); }
+  setAutoTarget(value: boolean) {
+    if (this.state.autoTarget === value) return;
+    this.reset(); this.state.autoTarget = value;
+  }
   setPlaying(value: boolean) {
     if (this.playing === value) return;
     this.playing = value; this.root.classList.toggle('inactive', !value);
