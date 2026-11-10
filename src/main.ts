@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import './style.css';
 import './mobile.css';
+import './arcade.css';
 import { JungleScene } from './scene';
 import { monkeyPortrait } from './art';
 import { WIDTH, HEIGHT, WORLDS, PLAYER_NAMES, PLAYER_COLOURS, WEAPONS } from './simulation';
@@ -8,6 +9,8 @@ import type { Simulation } from './simulation';
 import { heartFills, MAX_HEALTH } from './health';
 import { localSquad } from './local-lobby';
 import { TouchControls } from './touch-controls';
+import { DIFFICULTIES, UPGRADES } from './game-rules';
+import type { Difficulty, Upgrade } from './game-rules';
 
 const paths: Record<string, string> = {
   banana: '<path d="M18 3c3 10-4 20-15 16-2-1-3-3-2-5 9 4 15-2 15-10Z"/><path d="m16 4 1-3 3 1-1 3"/>',
@@ -35,7 +38,12 @@ let selected = [0], connected: number[] = [], requestedPlayers = 1, started = fa
 type Settings = { sound: boolean; music: boolean; shake: boolean; reduced: boolean; assist: boolean; touch: boolean; autoTarget: boolean };
 const settings: Settings = { sound: true, music: true, shake: true, reduced: false, assist: false, autoTarget: false, touch: matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0 };
 let best = 0;
+let difficulty: Difficulty = 'arcade';
+let records: Partial<Record<Difficulty, number>> = {};
 try { best = Number(localStorage.getItem('bb-best') ?? 0); Object.assign(settings, JSON.parse(localStorage.getItem('bb-settings') ?? '{}')); } catch { /* Storage can be unavailable in private browsing. */ }
+try { records = JSON.parse(localStorage.getItem('bb-records') ?? '{}'); const saved = localStorage.getItem('bb-difficulty'); if (saved && saved in DIFFICULTIES) difficulty = saved as Difficulty; } catch { /* Optional records. */ }
+records.arcade = Math.max(records.arcade ?? 0, best);
+best = records[difficulty] ?? 0;
 const saveSettings = () => { try { localStorage.setItem('bb-settings', JSON.stringify(settings)); } catch { /* Optional persistence. */ } };
 
 $('#app').innerHTML = `
@@ -92,6 +100,45 @@ $('#game-frame').insertAdjacentHTML('beforebegin', `
     <p id="join-help" role="status">One monkey. All the fruit. Ready when you are.</p>
     <label class="touch-choice hidden" id="touch-choice">PHONE CONTROLS <select id="touch-style"><option value="aim">Aim &amp; fire · You aim</option><option value="auto">Auto · Just move</option></select><small>Try aiming yourself, or choose Auto for a simpler start.</small></label>
   </section>`);
+$('.play-setup').insertAdjacentHTML('beforebegin', `
+  <section class="difficulty-picker" id="difficulty-picker" aria-label="Choose difficulty">
+    <div class="difficulty-heading"><div><span class="eyebrow">MAKE IT YOUR FOOD FIGHT</span><h2>PICK YOUR CHAOS<span>.</span></h2></div><span class="edition-tag">THE WILD UPDATE ${icon('bolt')}</span></div>
+    <div class="difficulty-options" role="group" aria-label="Difficulty">${(Object.keys(DIFFICULTIES) as Difficulty[]).map(key => { const d = DIFFICULTIES[key]; return `<button type="button" data-difficulty="${key}" style="--difficulty:${d.colour}" aria-pressed="${key === difficulty}"><span class="difficulty-stars" aria-hidden="true">${'✦'.repeat(d.stars)}<i>${'✦'.repeat(4 - d.stars)}</i></span><strong>${d.name}</strong><small>${d.tag}</small><span class="difficulty-score">${d.score}× SCORE</span></button>`; }).join('')}</div>
+    <div class="difficulty-caption"><span id="difficulty-description"></span><b id="difficulty-best"></b></div><button id="difficulty-start" class="difficulty-launch" disabled>PLAY ARCADE ${icon('play')}</button>
+  </section>`);
+$('.location').insertAdjacentHTML('beforeend', '<span class="difficulty-badge" id="difficulty-badge">ARCADE</span>');
+$('#in-game-hud').insertAdjacentHTML('beforeend', '<div class="rush-meter" id="rush-meter"><div><b id="rush-title">BANANA RUSH</b><span id="rush-count">0 / 12</span></div><div class="rush-track"><i id="rush-fill"></i></div><small>12 KILLS WITHOUT A HIT → RAPID FIRE</small></div>');
+$('#game-frame').insertAdjacentHTML('beforeend', '<section class="upgrade-overlay hidden" id="upgrade-overlay" role="dialog" aria-modal="true" aria-labelledby="upgrade-title"><div class="upgrade-panel"><div class="eyebrow">WAVE CLEARED · SQUAD SUPPLY DROP</div><h2 id="upgrade-title">A LITTLE MORE <span>BANANAS.</span></h2><p>Pick one. The whole squad gets stronger for this run.</p><div class="upgrade-options" id="upgrade-options"></div><small>Tap a card · Keys 1–3 · Controller: left/right, A to choose</small></div></section>');
+$('.dispatch').innerHTML = '<span>NEW TRICKS. SAME BAD CATS.</span><p>Outrun the pack.<br>Build your monkey.<br>Go absolutely bananas.</p><div>PERKS EVERY 3 WAVES · BOSSES EVERY 6</div>';
+$('#controls-dialog .dialog-tip').insertAdjacentHTML('beforebegin', '<p class="dialog-tip">Choose Chill, Arcade, Wild or Bananas before a run. Mint scarves mean fast flankers; purple hunters warn before firing pink shots. Dash through danger or use crates as cover. Bosses fire a ring of shots below half health. Every 3 waves, choose a squad upgrade. Get 12 kills without taking damage to trigger 6 seconds of Banana Rush rapid fire.</p>');
+let upgradeKey = '', upgradeFocusIndex = -1;
+function updateDifficulty() {
+  const d = DIFFICULTIES[difficulty]; best = records[difficulty] ?? 0;
+  for (const button of document.querySelectorAll<HTMLElement>('[data-difficulty]')) button.setAttribute('aria-pressed', String(button.dataset.difficulty === difficulty));
+  $('#difficulty-description').textContent = d.description;
+  $('#difficulty-best').textContent = `BEST ${String(best).padStart(6, '0')}`;
+  $('#best').textContent = String(best).padStart(6, '0');
+  $('#difficulty-badge').textContent = d.name; $('#difficulty-badge').style.setProperty('--difficulty', d.colour);
+  $('#difficulty-start').innerHTML = `PLAY ${d.name} ${icon('play')}`;
+}
+function selectUpgrade(key: Upgrade) {
+  if (!scene.paused && scene.sim.chooseUpgrade(key)) { touchControls.reset(); scene.upgradeIndex = 0; hud(scene.sim); }
+}
+$('#upgrade-options').addEventListener('click', event => { const button = (event.target as HTMLElement).closest<HTMLElement>('[data-upgrade]'); if (button) selectUpgrade(button.dataset.upgrade as Upgrade); });
+$('#upgrade-options').addEventListener('keydown', event => {
+  if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Tab', 'Enter', ' '].includes(event.key)) return;
+  event.preventDefault(); event.stopPropagation();
+  const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-upgrade]'));
+  const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+  if (event.key === 'Enter' || event.key === ' ') { const key = buttons[index]?.dataset.upgrade; if (key) selectUpgrade(key as Upgrade); return; }
+  const direction = ['ArrowLeft', 'ArrowUp'].includes(event.key) || (event.key === 'Tab' && event.shiftKey) ? -1 : 1;
+  scene.upgradeIndex = (index + direction + buttons.length) % buttons.length;
+  buttons[scene.upgradeIndex]?.focus({ preventScroll: true });
+});
+document.querySelectorAll<HTMLElement>('[data-difficulty]').forEach(button => button.addEventListener('click', () => {
+  if (started) return; difficulty = button.dataset.difficulty as Difficulty; updateDifficulty();
+  try { localStorage.setItem('bb-difficulty', difficulty); } catch { /* Optional preference. */ }
+}));
 $('.game-topbar').insertAdjacentHTML('afterend', '<div class="run-health" id="run-health" aria-label="Squad health"></div>');
 $('#canvas-wrap').insertAdjacentHTML('afterend', `
   <div class="touch-controls hidden inactive" id="touch-controls" aria-label="Touch game controls">
@@ -138,6 +185,7 @@ function updateSquad() {
     card.querySelector('.player-detail')!.textContent = joined ? ready ? (scene.controllerOnly || id > 0 ? '● CONTROLLER READY' : settings.touch ? '● TOUCH CONTROLS READY' : '● KEYBOARD + MOUSE') : 'PRESS A CONTROLLER BUTTON' : '+ CHOOSE LOCAL CO-OP';
   }
   $<HTMLButtonElement>('#start').disabled = !squad.canStart;
+  $<HTMLButtonElement>('#difficulty-start').disabled = !squad.canStart;
   $('#input-mode').innerHTML = `${icon('pad')} ${scene.controllerOnly ? 'ALL CONTROLLERS' : settings.touch ? 'TOUCH + CONTROLLERS' : 'KEYBOARD + CONTROLLERS'} ${icon('arrow')}`;
   if (!started) renderHealth(selected.map(id => ({ id, hp: MAX_HEALTH, alive: true })));
 }
@@ -158,7 +206,22 @@ function showBanner(text: string) { clearTimeout(bannerTimer); const el = $('#wa
 function hud(sim: Simulation) {
   if (!started) return;
   renderHealth(sim.players);
-  touchControls.setPlaying(!scene.paused && (sim.mode === 'playing' || sim.mode === 'break'));
+  touchControls.setPlaying(!scene.paused && !sim.upgradeChoices.length && (sim.mode === 'playing' || sim.mode === 'break'));
+  const choices = sim.upgradeChoices.join('|');
+  $('#upgrade-overlay').classList.toggle('hidden', !choices || scene.paused);
+  if (upgradeKey !== choices) {
+    upgradeKey = choices;
+    $('#upgrade-options').innerHTML = sim.upgradeChoices.map((key, index) => { const u = UPGRADES[key]; return `<button type="button" data-upgrade="${key}" style="--perk:${u.colour}"><span class="perk-art">${icon(u.icon)}</span><span class="perk-copy"><small>${key === 'care' ? 'INSTANT SUPPLIES' : `RUN UPGRADE · LEVEL ${sim.upgrades[key] + 1}`}</small><strong>${u.name}</strong><span>${u.detail}</span></span><b>${index + 1}</b></button>`; }).join('');
+  }
+  const upgradeButtons = document.querySelectorAll<HTMLButtonElement>('[data-upgrade]');
+  upgradeButtons.forEach((button, index) => button.classList.toggle('controller-choice', index === scene.upgradeIndex));
+  if (choices && !scene.paused && upgradeFocusIndex !== scene.upgradeIndex) { upgradeButtons[scene.upgradeIndex]?.focus({ preventScroll: true }); upgradeFocusIndex = scene.upgradeIndex; }
+  if (!choices || scene.paused) upgradeFocusIndex = -1;
+  const rush = sim.rushTime > 0;
+  $('#rush-meter').classList.toggle('active', rush); $('#game-frame').classList.toggle('rush-active', rush && !settings.reduced);
+  $('#rush-title').textContent = rush ? 'GO BANANAS!' : 'BANANA RUSH';
+  $('#rush-count').textContent = rush ? `${sim.rushTime.toFixed(1)}s` : `${sim.rushCharge} / 12`;
+  $('#rush-fill').style.width = `${rush ? sim.rushTime / 6 * 100 : sim.rushCharge / 12 * 100}%`;
   $('#wave').textContent = String(sim.wave).padStart(2, '0'); $('#score').textContent = String(sim.score).padStart(6, '0');
   $('#enemies').textContent = String(sim.enemies.length + sim.toSpawn); $('#run-time').textContent = formatTime(sim.time);
   $('#combo').textContent = sim.combo >= 3 ? `${sim.combo} COMBO ×${Math.min(5, 1 + Math.floor(sim.combo / 10))}` : '';
@@ -170,7 +233,7 @@ function hud(sim: Simulation) {
   const boss = sim.enemies.find(e => e.kind === 'boss');
   $('#intermission').classList.toggle('hidden', sim.mode !== 'break' && !boss);
   if (sim.mode === 'break') $('#intermission').innerHTML = `${sim.wave % 6 === 0 ? `NEXT STOP: ${WORLDS[Math.min(2, sim.world + 1)].name}` : 'GRAB THE FRUIT. CATCH YOUR BREATH.'}<b>NEXT WAVE IN ${Math.ceil(sim.breakTime)}</b>`;
-  else if (boss) $('#intermission').innerHTML = `<span>${sim.world === 0 ? 'KING CLAW' : sim.world === 1 ? 'PROFESSOR PURR' : 'ADMIRAL CLAW'}</span><div class="boss-track"><i style="width:${Math.max(0, boss.hp / boss.maxHp * 100)}%"></i></div>`;
+  else if (boss) $('#intermission').innerHTML = `<span>${sim.world === 0 ? 'KING CLAW' : sim.world === 1 ? 'PROFESSOR PURR' : 'ADMIRAL CLAW'}${boss.hp < boss.maxHp * 0.5 ? ' · FURY PHASE' : ''}</span><div class="boss-track"><i style="width:${Math.max(0, boss.hp / boss.maxHp * 100)}%"></i></div>`;
   for (const p of sim.players) {
     const card = $<HTMLButtonElement>(`[data-player="${p.id}"]`);
     card.querySelector('.player-detail')!.innerHTML = p.alive ? `<span class="health-icons">${healthIcons(p.hp)}</span>` : p.downTime > 0 ? `DOWN · ${Math.ceil(p.downTime)}s TO REVIVE` : 'OUT FOR THIS RUN';
@@ -180,16 +243,17 @@ function hud(sim: Simulation) {
   }
   const p = sim.players.find(p => p.id === 0)!;
   const healthTip = document.querySelector<HTMLElement>('#run-health .health-explainer');
-  if (healthTip) healthTip.textContent = p.vehicleTime > 0 ? 'TANK · PROTECTED' : p.shield > 0 ? `SHIELD · ${p.shield} HITS BLOCKED` : '1 JAGUAR HIT = ½ HEART';
+  if (healthTip) healthTip.textContent = p.vehicleTime > 0 ? 'TANK · PROTECTED' : p.shield > 0 ? `SHIELD · ${p.shield} BLOCK${p.shield === 1 ? '' : 'S'} LEFT` : '1 JAGUAR HIT = ½ HEART';
   $('#touch-bombs').textContent = String(p.bombs); $('#touch-dash').textContent = p.dashCd > 0 ? `${p.dashCd.toFixed(1)}s` : 'DASH';
-  $('#health-rule').textContent = p.vehicleTime > 0 ? 'TANK PROTECTION' : p.shield > 0 ? `SHIELD · ${p.shield} BLOCKS` : p.alive ? `${p.hp} HIT${p.hp === 1 ? '' : 'S'} LEFT` : 'MONKEY DOWN';
+  $('#health-rule').textContent = p.vehicleTime > 0 ? 'TANK PROTECTION' : p.shield > 0 ? `SHIELD · ${p.shield} BLOCK${p.shield === 1 ? '' : 'S'} LEFT` : p.alive ? `${p.hp} HIT${p.hp === 1 ? '' : 'S'} LEFT` : 'MONKEY DOWN';
   $('#game-status').innerHTML = `${settings.touch && !scene.controllerOnly ? settings.autoTarget ? 'AUTO · ' : 'AIM & FIRE · ' : ''}${p.vehicleTime > 0 ? `TIMBER TANK · ${Math.ceil(p.vehicleTime)}s` : WEAPONS[p.weapon].name} <span class="status-divider">/</span> ${p.bombs} MELON BOMBS <span class="status-divider">/</span> DASH ${p.dashCd > 0 ? `${p.dashCd.toFixed(1)}s` : 'READY'}`;
 }
 function start() {
   if (!localSquad(requestedPlayers, connected.length, scene.controllerOnly ? 'controllers' : 'mixed').canStart) return;
   started = true; $('#lobby').classList.add('hidden'); $('#end-overlay').classList.add('hidden'); $('#pause-overlay').classList.add('hidden');
   $('#in-game-hud').classList.remove('hidden'); $('#game-frame').classList.add('running'); $<HTMLButtonElement>('#pause').disabled = false;
-  scene.start(selected); applySettings(); updateSquad();
+  scene.start(selected, difficulty); applySettings(); updateSquad();
+  $('#difficulty-picker').classList.add('hidden'); upgradeKey = ''; $('#upgrade-overlay').classList.add('hidden');
   touchControls.setPlaying(true); $('.play-setup').classList.add('hidden');
   if (settings.touch) $('#game-frame').scrollIntoView({ block: 'start' });
   $('#pause').innerHTML = icon('pause'); $('#pause').setAttribute('aria-label', 'Pause game');
@@ -197,21 +261,22 @@ function start() {
 function pause(value: boolean) {
   if (!started || scene.sim.mode === 'over' || scene.sim.mode === 'won') return;
   scene.paused = value; scene.audio.music = settings.music && !value; $('#pause-overlay').classList.toggle('hidden', !value);
-  touchControls.setPlaying(!value);
+  touchControls.setPlaying(!value && !scene.sim.upgradeChoices.length); hud(scene.sim);
   $('#pause').innerHTML = icon(value ? 'play' : 'pause'); $('#pause').setAttribute('aria-label', value ? 'Resume game' : 'Pause game');
 }
 function ended(sim: Simulation) {
   scene.audio.music = false;
   touchControls.setPlaying(false);
-  if (sim.score > best) { best = sim.score; try { localStorage.setItem('bb-best', String(best)); } catch { /* Optional persistence. */ } }
+  if (sim.score > best) { best = sim.score; records[sim.difficulty] = best; try { localStorage.setItem('bb-records', JSON.stringify(records)); if (sim.difficulty === 'arcade') localStorage.setItem('bb-best', String(best)); } catch { /* Optional persistence. */ } }
   $('#best').textContent = String(best).padStart(6, '0');
   $('#end-eyebrow').textContent = sim.mode === 'won' ? 'THE FRUIT IS SAFE. FOR NOW.' : sim.score === best && best > 0 ? 'A FRESH PERSONAL BEST' : 'A NOBLE FOOD FIGHT';
   $('#end-title').innerHTML = sim.mode === 'won' ? 'SQUAD GOALS.<br><span>JUNGLE LEGENDS.</span>' : 'THAT WAS<br><span>BANANAS.</span>';
-  $('#end-subtitle').textContent = sim.mode === 'won' ? 'Three worlds. Eighteen waves. One legendary bunch.' : 'Every great monkey gets another shot.';
+  $('#end-subtitle').textContent = `${DIFFICULTIES[sim.difficulty].name} · ${sim.mode === 'won' ? 'Three worlds. Eighteen waves. One legendary bunch.' : 'Every great monkey gets another shot.'}`;
   $('#end-stats').innerHTML = `<div><span>TEAM SCORE</span><b>${String(sim.score).padStart(6, '0')}</b></div><div><span>WAVE</span><b>${String(sim.wave).padStart(2, '0')}</b></div><div><span>JAGUARS</span><b>${sim.kills}</b></div><div><span>BEST COMBO</span><b>${sim.bestCombo}</b></div>`;
   $('#end-overlay').classList.remove('hidden'); $<HTMLButtonElement>('#pause').disabled = true;
 }
-const scene = new JungleScene({ ready: () => { $('#loading').classList.add('hidden'); applySettings(); updateSquad(); }, hud, banner: showBanner, ended, pads: pads => {
+const scene = new JungleScene({ ready: () => { $('#loading').classList.add('hidden'); applySettings(); updateSquad(); updateDifficulty();
+}, hud, banner: showBanner, ended, pads: pads => {
   if (pads.join() === connected.join()) return; connected = pads; if (!started) updateSquad();
   else {
     const missing = selected.some(id => scene.controllerOnly ? id >= connected.length : id > 0 && id > connected.length);
@@ -226,10 +291,12 @@ new Phaser.Game({ type: Phaser.AUTO, parent: 'game', width: WIDTH, height: HEIGH
   audio: { noAudio: true }, banner: false });
 
 $('#start').addEventListener('click', start); $('#retry').addEventListener('click', start); $('#restart-paused').addEventListener('click', start);
+$('#difficulty-start').addEventListener('click', start);
 $('#pause').addEventListener('click', () => pause(!scene.paused)); $('#resume').addEventListener('click', () => pause(false));
 function backToLobby() {
   started = false; scene.prepareLobby(); $('#lobby').classList.remove('hidden'); $('#end-overlay').classList.add('hidden'); $('#in-game-hud').classList.add('hidden'); $('#game-frame').classList.remove('running'); $('#intermission').classList.add('hidden'); $<HTMLButtonElement>('#pause').disabled = true;
   $('#pause-overlay').classList.add('hidden'); $('.play-setup').classList.remove('hidden'); touchControls.setPlaying(false); touchControls.reset();
+  $('#difficulty-picker').classList.remove('hidden'); $('#upgrade-overlay').classList.add('hidden'); $('#game-frame').classList.remove('rush-active'); upgradeKey = ''; updateDifficulty();
   $('#location-name').textContent = $('#world-title').textContent = WORLDS[0].name; $('#world-sub').textContent = WORLDS[0].sub;
   $('#run-time').textContent = '00:00'; $('#chapter').textContent = $('#chapter-number').textContent = '01';
   $('#chapter-progress').innerHTML = Array.from({ length: 6 }, (_, i) => `<i class="${i === 0 ? 'current' : ''}"></i>`).join('');
@@ -251,7 +318,7 @@ function openDialog(id: string) { dialogPaused = scene.paused; if (started) paus
 $('#how').addEventListener('click', () => openDialog('#controls-dialog')); $('#controls-more').addEventListener('click', () => openDialog('#controls-dialog')); $('#settings').addEventListener('click', () => openDialog('#settings-dialog'));
 document.querySelectorAll<HTMLDialogElement>('dialog').forEach(dialog => { dialog.querySelectorAll('button').forEach(button => button.addEventListener('click', () => dialog.close())); dialog.addEventListener('close', () => { if (started && !dialogPaused) pause(false); }); dialog.addEventListener('click', event => { if (event.target === dialog) { const r = dialog.getBoundingClientRect(); if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) dialog.close(); } }); });
 document.querySelectorAll<HTMLInputElement>('.settings-list input').forEach(input => input.addEventListener('change', () => { settings[input.name as keyof Settings] = input.checked; applySettings(); if (!started) updateSquad(); saveSettings(); }));
-window.addEventListener('keydown', event => { if (event.repeat || document.querySelector('dialog[open]')) return; if (event.code === 'Escape' || event.code === 'KeyP') { event.preventDefault(); pause(!scene.paused); } });
+window.addEventListener('keydown', event => { if (event.repeat || document.querySelector('dialog[open]')) return; if (scene.sim.upgradeChoices.length && !scene.paused && /^Digit[123]$/.test(event.code)) { event.preventDefault(); const key = scene.sim.upgradeChoices[Number(event.code.slice(-1)) - 1]; if (key) selectUpgrade(key); return; } if (event.code === 'Escape' || event.code === 'KeyP') { event.preventDefault(); pause(!scene.paused); } });
 document.addEventListener('visibilitychange', () => { if (document.hidden && started) pause(true); });
 const descriptions: Record<string, string> = { banana: 'Hold fire for a steady stream of bananas. Unlimited fruit. Questionable accuracy.', nuts: 'Six crunchy projectiles in a wide spread. Get close, crack nuts, clear the pack.', coconut: 'Slow, heavy coconuts explode on impact. Perfect for crowds and particularly large cats.' };
 document.querySelectorAll<HTMLButtonElement>('[data-weapon]').forEach(button => button.addEventListener('click', () => { document.querySelectorAll('.weapon').forEach(b => b.classList.remove('selected')); button.classList.add('selected'); $('#weapon-description').textContent = descriptions[button.dataset.weapon!]; }));

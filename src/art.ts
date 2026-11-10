@@ -61,7 +61,7 @@ export function makeArt(scene: Phaser.Scene) {
     oval(c, 57, 28, 2, 2, '#fff2c0');
   });
 
-  for (const kind of ['chaser', 'pouncer', 'bruiser', 'boss']) texture(scene, kind, 100, 86, c => {
+  for (const kind of ['chaser', 'pouncer', 'bruiser', 'boss', 'hunter', 'stalker']) texture(scene, kind, 100, 86, c => {
     const boss = kind === 'boss', heavy = kind === 'bruiser';
     oval(c, 49, 48, 37, 23, '#0d1c1745');
     c.beginPath(); c.moveTo(28, 43); c.bezierCurveTo(-10, 48, 10, 7, 20, 20); c.strokeStyle = '#352d21'; c.lineWidth = 7; c.lineCap = 'round'; c.stroke();
@@ -84,6 +84,16 @@ export function makeArt(scene: Phaser.Scene) {
     oval(c, 80, 34, 2, 2, kind === 'pouncer' ? '#a7eeec' : '#f9f3d0'); oval(c, 80, 52, 2, 2, '#f9f3d0');
     oval(c, 81, 34, 0.9, 1.7, '#1d2d23'); oval(c, 81, 52, 0.9, 1.7, '#1d2d23');
     if (kind === 'pouncer') round(c, 63, 27, 5, 34, 2, '#58b7b0');
+    if (kind === 'hunter') {
+      round(c, 32, 25, 25, 37, 7, '#6a4f8c', '#382d4c'); line(c, [[35, 30], [53, 56]], '#d6b3e7', 4);
+      line(c, [[69, 19], [90, 43], [69, 67]], '#dd96bd', 5); line(c, [[69, 19], [69, 67]], '#f9d9d4', 2);
+      line(c, [[67, 43], [96, 43]], '#f4c79b', 4);
+    }
+    if (kind === 'stalker') {
+      round(c, 61, 24, 7, 38, 3, '#76d5b8', '#2a6454');
+      line(c, [[63, 26], [43, 10], [51, 26], [29, 17]], '#91ebc9', 5);
+      round(c, 74, 29, 7, 29, 3, '#304a3f');
+    }
     if (heavy) { round(c, 35, 26, 14, 35, 4, '#735d49'); line(c, [[37, 30], [47, 30]], '#b5a28b', 2); round(c, 61, 25, 8, 38, 2, '#b96345'); }
     if (boss) { c.fillStyle = '#ffda69'; c.beginPath(); c.moveTo(61, 29); c.lineTo(60, 12); c.lineTo(68, 19); c.lineTo(74, 8); c.lineTo(80, 20); c.lineTo(88, 13); c.lineTo(86, 30); c.closePath(); c.fill(); round(c, 61, 27, 25, 5, 1, '#b37634'); }
   });

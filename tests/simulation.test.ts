@@ -57,6 +57,7 @@ test('a nearby teammate can revive a downed monkey, while a team wipe ends the r
 test('clearing a boss chapter opens the next world, and the last chapter wins', () => {
   const sim = fixture(); sim.wave = 6; sim.toSpawn = 0; sim.enemies = [];
   sim.update(1 / 60, new Map()); assert.equal(sim.mode, 'break');
+  assert.equal(sim.upgradeChoices.length, 3); sim.chooseUpgrade(sim.upgradeChoices[0]);
   run(sim, 425); assert.equal(sim.wave, 7); assert.equal(sim.world, 1); assert.equal(sim.mode, 'playing');
   sim.wave = 18; sim.toSpawn = 0; sim.enemies = []; sim.update(1 / 60, new Map()); assert.equal(sim.mode, 'won');
 });

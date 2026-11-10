@@ -7,6 +7,7 @@ import { heartFills } from './health';
 import { controllerForPlayer } from './local-lobby';
 import type { TouchControls } from './touch-controls';
 import { touchAim } from './touch-aim';
+import type { Difficulty } from './game-rules';
 
 export type Hooks = { ready: () => void; hud: (sim: Simulation) => void; banner: (text: string) => void; ended: (sim: Simulation) => void; pads: (pads: number[]) => void };
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; max: number; size: number; colour: number };
@@ -19,6 +20,9 @@ export class JungleScene extends Phaser.Scene {
   assist = false;
   controllerOnly = false;
   touch?: TouchControls;
+  upgradeIndex = 0;
+  private upgradeAxis = 0;
+  private upgradeHeld = true;
   private background!: Phaser.GameObjects.Image;
   private under!: Phaser.GameObjects.Graphics;
   private over!: Phaser.GameObjects.Graphics;
@@ -66,8 +70,8 @@ export class JungleScene extends Phaser.Scene {
     }
     this.sim.drop('nuts', 800, 300); this.sim.drop('bomb', 490, 540); this.sim.drop('tank', 950, 540);
   }
-  start(ids: number[]) {
-    this.sim.start(ids); this.finished = false; this.paused = false; this.accumulator = 0;
+  start(ids: number[], difficulty: Difficulty = 'arcade') {
+    this.sim.start(ids, difficulty); this.finished = false; this.paused = false; this.accumulator = 0; this.upgradeIndex = 0;
     this.particles = []; this.rings = []; this.keys.clear(); this.pressed.clear(); this.pointerBomb = false;
     this.touch?.reset(); this.audio.unlock(); this.hooks.hud(this.sim);
   }
@@ -125,6 +129,16 @@ export class JungleScene extends Phaser.Scene {
   update(time: number, delta: number) {
     if (!this.under) return;
     const dt = Math.min(0.05, delta / 1000);
+    if (this.sim.upgradeChoices.length && !this.paused) {
+      const pad = Array.from(navigator.getGamepads?.() ?? []).find(p => p?.connected);
+      const axis = (pad?.axes[0] ?? 0) > 0.6 || pad?.buttons[15]?.pressed ? 1 : (pad?.axes[0] ?? 0) < -0.6 || pad?.buttons[14]?.pressed ? -1 : 0;
+      if (axis && axis !== this.upgradeAxis) this.upgradeIndex = (this.upgradeIndex + axis + this.sim.upgradeChoices.length) % this.sim.upgradeChoices.length;
+      const held = !!pad?.buttons[0]?.pressed;
+      if (held && !this.upgradeHeld) { this.sim.chooseUpgrade(this.sim.upgradeChoices[this.upgradeIndex]); this.upgradeIndex = 0; this.touch?.reset(); }
+      // Confirming a perk must not become a fresh dash/bomb in the same frame.
+      if (pad) this.padPrevious.set(pad.index, pad.buttons.map(button => button.pressed));
+      this.upgradeAxis = axis; this.upgradeHeld = held;
+    } else { this.upgradeAxis = 0; this.upgradeHeld = true; }
     if (time - this.lastPads > 400) {
       this.lastPads = time;
       this.padIds = Array.from(navigator.getGamepads?.() ?? []).filter((p): p is Gamepad => !!p?.connected).map(p => p.index);
@@ -167,12 +181,21 @@ export class JungleScene extends Phaser.Scene {
     if (this.lastWorld !== this.sim.world) { this.background.setTexture(`world${this.sim.world}`); this.lastWorld = this.sim.world; }
     const g = this.under, over = this.over; g.clear(); over.clear();
     const ready = this.sim.mode === 'ready';
+    if (!this.reduced) for (let i = 0; i < 18; i++) {
+      const x = 80 + ((i * 173 + time * (6 + i % 3)) % 1120), y = 100 + ((i * 97 + Math.sin(time * 0.6 + i) * 28) % 550 + 550) % 550;
+      g.fillStyle(this.sim.world === 2 ? 0xb7d9ff : 0xffe6a1, 0.12 + Math.sin(time + i) ** 2 * 0.25); g.fillCircle(x, y, i % 3 === 0 ? 2.5 : 1.4);
+    }
+    if (this.sim.rushTime > 0) { g.lineStyle(8, 0xffd36c, 0.5); g.strokeRoundedRect(58, 76, WIDTH - 116, HEIGHT - 145, 45); }
     for (const e of this.sim.enemies) {
       if (e.windup > 0) {
-        const reach = e.kind === 'boss' ? 330 : 180;
-        g.lineStyle(e.kind === 'boss' ? 26 : 15, 0xf9d47a, 0.25 + Math.sin(time * 20) * 0.12);
+        const reach = e.kind === 'hunter' ? 560 : e.kind === 'boss' ? 330 : 180;
+        g.lineStyle(e.kind === 'boss' ? 26 : 15, e.kind === 'hunter' ? 0xf48aab : 0xf9d47a, this.reduced ? 0.35 : 0.25 + Math.sin(time * 20) * 0.12);
         g.lineBetween(e.x, e.y, e.x + e.dx * reach, e.y + e.dy * reach);
         g.lineStyle(2, 0xffdc86, 0.8); g.strokeCircle(e.x + e.dx * reach, e.y + e.dy * reach, e.radius + 10);
+      }
+      if (e.kind === 'boss' && e.hp < e.maxHp * 0.5) { g.lineStyle(3, 0xf88e9b, 0.7); g.strokeCircle(e.x, e.y, e.radius + 12); }
+      if (e.kind === 'hunter' || e.kind === 'stalker') {
+        g.lineStyle(2, e.kind === 'hunter' ? 0xdca4f6 : 0x9bdfca, 0.65); g.strokeEllipse(e.x, e.y + 11, 49, 27);
       }
       if (e.age < 0.7) { g.lineStyle(2, 0xf3d58c, 0.8); g.strokeCircle(e.x, e.y, 26 + Math.sin(e.age * 15) * 6); }
       const size = e.kind === 'boss' ? 148 : e.kind === 'bruiser' ? 83 : 65;
@@ -218,7 +241,13 @@ export class JungleScene extends Phaser.Scene {
       const healthY = p.y - (tank ? 48 : 39);
       over.fillStyle(0x1b3025, 0.8); over.fillRoundedRect(p.x - 28, healthY - 11, 56, 21, 5);
       heartFills(p.hp).forEach((fill, index) => this.sprite(`hp${p.id}-${index}`, `health-${fill}`, p.x + (index - 1) * 17, healthY, 17, 17).setDepth(11000));
-      if (p.dashCd > 0) { over.lineStyle(2, colour, 0.6); over.beginPath(); over.arc(p.x, p.y + 12, 24, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - p.dashCd / 2.4)); over.strokePath(); }
+      if (p.dashCd > 0) { over.lineStyle(2, colour, 0.6); over.beginPath(); over.arc(p.x, p.y + 12, 24, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - p.dashCd / this.sim.dashCooldown)); over.strokePath(); }
+    }
+    for (const shot of this.sim.enemyShots) {
+      g.lineStyle(5, 0xef708e, 0.28); g.lineBetween(shot.x, shot.y, shot.x - shot.vx * 0.08, shot.y - shot.vy * 0.08);
+      over.fillStyle(0x65344c, 0.3); over.fillCircle(shot.x, shot.y, 12);
+      over.fillStyle(0xff95ad); over.fillCircle(shot.x, shot.y, 7);
+      over.lineStyle(2, 0xffe0dc); over.strokeCircle(shot.x, shot.y, 7);
     }
     for (const b of this.sim.projectiles) {
       g.lineStyle(b.kind === 'coconut' ? 4 : 3, b.kind === 'nuts' ? 0xd1a46b : 0xffdf74, 0.25);
@@ -280,6 +309,8 @@ export class JungleScene extends Phaser.Scene {
     if (event.kind === 'hurt') { this.audio.hurt(); this.floating('−½ HEART', x, y, '#ffb1a1'); this.burst(x, y, 15, [0xf1a18d, 0xe8b66d]); if (this.shake) this.cameras.main.shake(100, 0.0025); }
     if (event.kind === 'dash') { this.audio.dash(); this.burst(x, y, 12, [0xefe3ad, 0xb3c880], 90); }
     if (event.kind === 'wave') { this.audio.wave(); this.hooks.banner(event.text ?? 'GO BANANAS!'); }
+    if (event.kind === 'rush') { this.audio.wave(); this.hooks.banner(event.text ?? 'BANANA RUSH!'); this.burst(x, y, this.reduced ? 10 : 40, [0xffd66c, 0xfff0b0], 300); }
+    if (event.kind === 'enemy-shot') this.burst(x, y, 6, [0xf29bb9, 0xe8c0f3], 70);
     if (event.kind === 'down') this.floating('MONKEY DOWN!', x, y, '#ffb1a1', true);
   }
   worldName() { return WORLDS[this.sim.world].name; }
